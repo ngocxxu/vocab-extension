@@ -10,7 +10,8 @@ export interface StorageData {
   refreshToken?: string;
   user?: UserDto;
   activeFolderId?: string;
-  activeSubjectId?: string;
+  activeSubjectId?: string; // Legacy - kept for migration
+  activeSubjectIds?: string[]; // New - supports multiple subjects
   activeWordTypeId?: string;
   cachedFolders?: LanguageFolderDto[];
   cachedSubjects?: SubjectDto[];

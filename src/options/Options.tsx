@@ -11,6 +11,14 @@ import type {
   LanguageFolderInput,
   SubjectInput,
 } from '../shared/types/vocab';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { MultiSelect } from '../components/ui/multi-select';
 
 type Tab = 'login' | 'folders' | 'subjects';
 
@@ -21,7 +29,7 @@ function Options() {
   const [subjects, setSubjects] = useState<SubjectDto[]>([]);
   const [, setWordTypes] = useState<WordTypeDto[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string>('');
-  const [activeSubjectId, setActiveSubjectId] = useState<string>('');
+  const [activeSubjectIds, setActiveSubjectIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -41,12 +49,22 @@ function Options() {
   };
 
   const loadSettings = async () => {
-    const [folderId, subjectId] = await Promise.all([
+    const [folderId, subjectIds, legacySubjectId] = await Promise.all([
       storage.get('activeFolderId'),
+      storage.get('activeSubjectIds'),
       storage.get('activeSubjectId'),
     ]);
     setActiveFolderId(folderId || '');
-    setActiveSubjectId(subjectId || '');
+    
+    if (subjectIds && Array.isArray(subjectIds)) {
+      setActiveSubjectIds(subjectIds);
+    } else if (legacySubjectId) {
+      setActiveSubjectIds([legacySubjectId]);
+      await storage.set('activeSubjectIds', [legacySubjectId]);
+      await storage.remove(['activeSubjectId']);
+    } else {
+      setActiveSubjectIds([]);
+    }
   };
 
   const loadFolders = async () => {
@@ -140,7 +158,7 @@ function Options() {
     setFolders([]);
     setSubjects([]);
     setActiveFolderId('');
-    setActiveSubjectId('');
+    setActiveSubjectIds([]);
     setActiveTab('login');
   };
 
@@ -193,8 +211,8 @@ function Options() {
       try {
         const subject = await apiClient.post('/subjects', defaultSubject);
         const subjectData = subject as SubjectDto;
-        await storage.set('activeSubjectId', subjectData.id);
-        setActiveSubjectId(subjectData.id);
+        await storage.set('activeSubjectIds', [subjectData.id]);
+        setActiveSubjectIds([subjectData.id]);
         const updatedSubjects = [...currentSubjects, subjectData];
         setSubjects(updatedSubjects);
         await storage.set('cachedSubjects', updatedSubjects);
@@ -209,8 +227,8 @@ function Options() {
               : [];
           const existingDefault = subjectsList.find(s => s.name === 'Default');
           if (existingDefault) {
-            await storage.set('activeSubjectId', existingDefault.id);
-            setActiveSubjectId(existingDefault.id);
+            await storage.set('activeSubjectIds', [existingDefault.id]);
+            setActiveSubjectIds([existingDefault.id]);
             setSubjects(subjectsList);
             await storage.set('cachedSubjects', subjectsList);
           }
@@ -219,7 +237,7 @@ function Options() {
         }
       }
     } else {
-      setActiveSubjectId(defaultSubjectExists.id);
+      setActiveSubjectIds([defaultSubjectExists.id]);
     }
   };
 
@@ -264,7 +282,7 @@ function Options() {
 
   const handleSaveSettings = async () => {
     await storage.set('activeFolderId', activeFolderId);
-    await storage.set('activeSubjectId', activeSubjectId);
+    await storage.set('activeSubjectIds', activeSubjectIds);
     alert('Settings saved successfully!');
   };
 
@@ -335,128 +353,145 @@ function Options() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold">Vocab Manager Settings</h1>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Vocab Manager Settings</h1>
+              <p className="mt-2 text-slate-600">Manage your folders and subjects</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 mb-6">
-          <p className="text-gray-600">{user.email}</p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow">
-          <div className="flex border-b">
-            {(['folders', 'subjects'] as Tab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 border-b-2 ${
-                  activeTab === tab
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {tab === 'folders' ? (
-                  <span className="flex items-center gap-2">
-                    <FolderTree className="w-4 h-4" />
-                    Folders
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <Tag className="w-4 h-4" />
-                    Subjects
-                  </span>
-                )}
-              </button>
-            ))}
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900">{user.name || 'User'}</p>
+                <p className="text-sm text-slate-600">{user.email}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+            <div className="flex border-b border-slate-200">
+              {(['folders', 'subjects'] as Tab[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 px-6 py-4 border-b-2 transition-colors ${
+                    activeTab === tab
+                      ? 'border-blue-600 text-blue-600 font-semibold'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab === 'folders' ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <FolderTree className="w-4 h-4" />
+                      Folders
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <Tag className="w-4 h-4" />
+                      Subjects
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-6">
             {activeTab === 'folders' && (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Select Active Folder</h3>
-                  <div className="space-y-2">
-                    {folders.map((folder) => (
-                      <label key={folder.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="folder"
-                          value={folder.id}
-                          checked={activeFolderId === folder.id}
-                          onChange={() => setActiveFolderId(folder.id)}
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium">{folder.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {folder.sourceLanguageCode} → {folder.targetLanguageCode}
+                  <h3 className="text-lg font-semibold mb-3 text-slate-900">Select Active Folder</h3>
+                  <p className="text-sm text-slate-600 mb-4">Choose which folder to use for saving new vocabulary</p>
+                  <Select value={activeFolderId} onValueChange={setActiveFolderId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a folder" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {folders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-4 h-4 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: folder.folderColor }}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium">{folder.name}</div>
+                              <div className="text-xs text-slate-500">
+                                {folder.sourceLanguageCode.toUpperCase()} → {folder.targetLanguageCode.toUpperCase()}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div
-                          className="w-4 h-4 rounded"
-                          style={{ backgroundColor: folder.folderColor }}
-                        />
-                      </label>
-                    ))}
-                  </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Create New Folder</h3>
+                <div className="border-t border-slate-200 pt-6">
+                  <h3 className="text-lg font-semibold mb-3 text-slate-900">Create New Folder</h3>
+                  <p className="text-sm text-slate-600 mb-4">Add a new language learning folder</p>
                   <form onSubmit={handleCreateFolder} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <label className="block text-sm font-semibold mb-2 text-slate-900">Name</label>
                         <input
                           type="text"
                           name="name"
                           required
-                          className="w-full px-3 py-2 border rounded"
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
+                          placeholder="e.g., English → Vietnamese"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Color</label>
+                        <label className="block text-sm font-semibold mb-2 text-slate-900">Color</label>
                         <input
                           type="color"
                           name="color"
                           defaultValue="#4CAF50"
-                          className="w-full h-10"
+                          className="w-full h-11 rounded-lg border border-slate-300 cursor-pointer"
                         />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-1">Source Language</label>
+                        <label className="block text-sm font-semibold mb-2 text-slate-900">Source Language</label>
                         <input
                           type="text"
                           name="sourceLanguage"
                           placeholder="en"
                           required
-                          className="w-full px-3 py-2 border rounded"
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1">Target Language</label>
+                        <label className="block text-sm font-semibold mb-2 text-slate-900">Target Language</label>
                         <input
                           type="text"
                           name="targetLanguage"
                           placeholder="vi"
                           required
-                          className="w-full px-3 py-2 border rounded"
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
                         />
                       </div>
                     </div>
                     <button
                       type="submit"
-                      className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+                      className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm"
                     >
                       Create Folder
                     </button>
@@ -466,40 +501,36 @@ function Options() {
             )}
 
             {activeTab === 'subjects' && (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Select Active Subject</h3>
-                  <div className="space-y-2">
-                    {subjects.map((subject) => (
-                      <label key={subject.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="subject"
-                          value={subject.id}
-                          checked={activeSubjectId === subject.id}
-                          onChange={() => setActiveSubjectId(subject.id)}
-                        />
-                        <span>{subject.name}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <h3 className="text-lg font-semibold mb-3 text-slate-900">Select Active Subjects</h3>
+                  <p className="text-sm text-slate-600 mb-4">Choose which subjects to categorize your vocabulary</p>
+                  <MultiSelect
+                    options={subjects.map(s => ({ label: s.name, value: s.id }))}
+                    onValueChange={setActiveSubjectIds}
+                    defaultValue={activeSubjectIds}
+                    placeholder="Select subjects"
+                    maxCount={3}
+                  />
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Create New Subject</h3>
+                <div className="border-t border-slate-200 pt-6">
+                  <h3 className="text-lg font-semibold mb-3 text-slate-900">Create New Subject</h3>
+                  <p className="text-sm text-slate-600 mb-4">Add a new subject to organize your vocabulary</p>
                   <form onSubmit={handleCreateSubject} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Name</label>
+                      <label className="block text-sm font-semibold mb-2 text-slate-900">Name</label>
                       <input
                         type="text"
                         name="name"
                         required
-                        className="w-full px-3 py-2 border rounded"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
+                        placeholder="e.g., Business, Travel, Technology"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+                      className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm"
                     >
                       Create Subject
                     </button>
@@ -507,25 +538,26 @@ function Options() {
                 </div>
               </div>
             )}
+            </div>
+
+            <div className="border-t border-slate-200 p-6">
+              <button
+                onClick={handleSaveSettings}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Save className="w-5 h-5" />
+                Save Settings
+              </button>
+            </div>
           </div>
         </div>
-
-        <div className="mt-6">
-          <button
-            onClick={handleSaveSettings}
-            className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
-          >
-            <Save className="w-5 h-5" />
-            Save Settings
-          </button>
-        </div>
-
-        {error && (
-          <div className="mt-4 p-4 bg-red-50 text-red-700 rounded">
-            {error}
-          </div>
-        )}
       </div>
+
+      {error && (
+        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700 font-medium">{error}</p>
+        </div>
+      )}
     </div>
   );
 }

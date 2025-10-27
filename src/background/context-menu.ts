@@ -16,9 +16,11 @@ export function setupContextMenu() {
       try {
         const selectedText = info.selectionText;
         const folderId = await storage.get("activeFolderId");
-        const subjectId = await storage.get("activeSubjectId");
+        const subjectIds = (await storage.get("activeSubjectIds")) as
+          | string[]
+          | undefined;
 
-        if (!folderId || !subjectId) {
+        if (!folderId || !subjectIds || subjectIds.length === 0) {
           chrome.notifications.create({
             type: "basic",
             iconUrl: chrome.runtime.getURL("icons/icon48.png"),
@@ -41,7 +43,7 @@ export function setupContextMenu() {
               grammar: "",
               explanationSource: "",
               explanationTarget: "",
-              subjectIds: [subjectId as string],
+              subjectIds: subjectIds,
             },
           ],
         };

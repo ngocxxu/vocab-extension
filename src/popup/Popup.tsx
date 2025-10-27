@@ -7,7 +7,7 @@ import type { LanguageFolderDto, SubjectDto } from '../shared/types/vocab';
 function Popup() {
   const [user, setUser] = useState<UserDto | null>(null);
   const [folder, setFolder] = useState<LanguageFolderDto | null>(null);
-  const [subject, setSubject] = useState<SubjectDto | null>(null);
+  const [subjects, setSubjects] = useState<SubjectDto[]>([]);
 
   useEffect(() => {
     loadData();
@@ -25,10 +25,10 @@ function Popup() {
   }, []);
 
   const loadData = async () => {
-    const [userData, folderId, subjectId] = await Promise.all([
+    const [userData, folderId, subjectIds] = await Promise.all([
       storage.get('user'),
       storage.get('activeFolderId'),
-      storage.get('activeSubjectId'),
+      storage.get('activeSubjectIds'),
     ]);
 
     setUser(userData || null);
@@ -39,10 +39,12 @@ function Popup() {
       setFolder(activeFolder || null);
     }
 
-    if (subjectId) {
-      const subjects = await storage.get('cachedSubjects') || [];
-      const activeSubject = subjects.find((s) => s.id === subjectId);
-      setSubject(activeSubject || null);
+    if (subjectIds && Array.isArray(subjectIds) && subjectIds.length > 0) {
+      const allSubjects = await storage.get('cachedSubjects') || [];
+      const activeSubjects = allSubjects.filter((s) => subjectIds.includes(s.id));
+      setSubjects(activeSubjects);
+    } else {
+      setSubjects([]);
     }
   };
 
@@ -117,14 +119,20 @@ function Popup() {
               </div>
             )}
 
-            {subject && (
-              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
-                <div className="text-xs font-medium text-emerald-900 mb-0.5">Subject</div>
-                <div className="text-sm font-medium text-emerald-700">{subject.name}</div>
+            {subjects.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-emerald-900 mb-0.5">
+                  Subject{subjects.length > 1 ? 's' : ''}
+                </div>
+                {subjects.map((subject) => (
+                  <div key={subject.id} className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
+                    <div className="text-sm font-medium text-emerald-700">{subject.name}</div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {(!folder || !subject) && (
+            {(!folder || subjects.length === 0) && (
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
                 <p className="text-xs text-amber-800">
                   Please configure your folder and subject in settings.
