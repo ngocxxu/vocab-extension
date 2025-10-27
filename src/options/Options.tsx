@@ -27,7 +27,7 @@ import { storage } from '../shared/utils/storage';
 type Tab = 'login' | 'folders' | 'subjects';
 
 function Options() {
-  const [activeTab, setActiveTab] = useState<Tab>('login');
+  const [activeTab, setActiveTab] = useState<Tab>('folders');
   const [user, setUser] = useState<UserDto | null>(null);
   const [folders, setFolders] = useState<LanguageFolderDto[]>([]);
   const [subjects, setSubjects] = useState<SubjectDto[]>([]);
@@ -327,9 +327,25 @@ function Options() {
   };
 
   const handleSaveSettings = async () => {
-    await storage.set('activeFolderId', activeFolderId);
-    await storage.set('activeSubjectIds', activeSubjectIds);
-    alert('Settings saved successfully!');
+    if (!activeFolderId) {
+      setError('Please select a folder before saving.');
+      return;
+    }
+
+    if (!activeSubjectIds || activeSubjectIds.length === 0) {
+      setError('Please select at least one subject before saving.');
+      return;
+    }
+
+    try {
+      await storage.set('activeFolderId', activeFolderId);
+      await storage.set('activeSubjectIds', activeSubjectIds);
+      setError('');
+      alert('Settings saved successfully!');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save settings';
+      setError(errorMessage);
+    }
   };
 
   if (!user) {
@@ -397,7 +413,7 @@ function Options() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 p-8">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 via-white to-blue-50/30 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -587,7 +603,7 @@ function Options() {
               </div>
             </div>
 
-            <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200 border-t border-slate-200 p-6">
+            <div className="bg-white rounded-b-xl shadow-sm border border-slate-200 border-t p-6">
               <button
                 onClick={handleSaveSettings}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2 shadow-sm"
