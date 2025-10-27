@@ -2,25 +2,16 @@
 
 ## Current Status
 
-The extension is built and ready to use, but currently uses placeholder icons (empty files).
+The extension now includes proper icons with a blue-to-purple gradient design featuring a white "V" letter, matching the Vocabulary app branding.
 
-## Adding Real Icons
+## Icons
 
-To add proper icons to your extension:
+The extension uses PNG icons located in `public/icons/`:
 
-1. Create PNG images with these sizes:
-
-   - 16x16 pixels
-   - 32x32 pixels
-   - 48x48 pixels
-   - 128x128 pixels
-
-2. Place them in the `public/icons/` directory:
-
-   - `public/icons/icon16.png`
-   - `public/icons/icon32.png`
-   - `public/icons/icon48.png`
-   - `public/icons/icon128.png`
+- `public/icons/icon16.png` - 16x16 pixels
+- `public/icons/icon32.png` - 32x32 pixels
+- `public/icons/icon48.png` - 48x48 pixels
+- `public/icons/icon128.png` - 128x128 pixels
 
 3. Rebuild the extension:
    ```bash

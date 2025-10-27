@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Settings, User } from 'lucide-react';
+import { Settings, User } from 'lucide-react';
 import { storage } from '../shared/utils/storage';
 import type { UserDto } from '../shared/types/api';
 import type { LanguageFolderDto, SubjectDto } from '../shared/types/vocab';
@@ -54,10 +54,10 @@ function Popup() {
 
   if (!user) {
     return (
-      <div className="w-80 p-6 bg-linear-to-b from-slate-50 to-white">
+      <div className="w-80 p-6 bg-gradient-to-b from-slate-50 to-white">
         <div className="flex items-center gap-2 mb-6">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <BookOpen className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center shadow-md">
+            <span className="text-lg font-bold text-white">V</span>
           </div>
           <h1 className="text-xl font-semibold text-slate-900">Vocab Manager</h1>
         </div>
@@ -80,11 +80,11 @@ function Popup() {
   }
 
   return (
-    <div className="w-80 bg-linear-to-b from-slate-50 to-white">
+    <div className="w-80 bg-gradient-to-b from-slate-50 to-white">
       <div className="p-6 border-b border-slate-200">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <BookOpen className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center shadow-md">
+            <span className="text-lg font-bold text-white">V</span>
           </div>
           <h1 className="text-xl font-semibold text-slate-900">Vocab Manager</h1>
         </div>
