@@ -26,10 +26,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     (async () => {
       try {
+        const folders = await storage.get("cachedFolders");
+        const activeFolder = folders?.find(
+          (f: { id: string }) => f.id === folderId
+        );
+
         const vocabData = {
           textSource: selectedText,
-          sourceLanguageCode: "auto",
-          targetLanguageCode: "auto",
+          sourceLanguageCode: activeFolder?.sourceLanguageCode || "auto",
+          targetLanguageCode: activeFolder?.targetLanguageCode || "auto",
           languageFolderId: folderId,
           textTargets: [
             {
