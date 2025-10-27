@@ -80,7 +80,7 @@ pnpm build
 Edit `src/shared/constants.ts` to change the API base URL:
 
 ```typescript
-export const API_BASE_URL = "http://localhost:3000";
+export const API_BASE_URL = "http://localhost:3002";
 ```
 
 ### Development

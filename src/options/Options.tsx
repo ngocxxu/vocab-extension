@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import { LogIn, FolderTree, Tag, LogOut, Save } from 'lucide-react';
+import { LogIn, FolderTree, Tag, LogOut, Save, BookOpen } from 'lucide-react';
 import { apiClient } from '../background/api-client';
 import { storage } from '../shared/utils/storage';
 import { tokenManager } from '../background/token-manager';
+import type { UserDto, SignInInput } from '../shared/types/api';
 import type {
-  UserDto,
   LanguageFolderDto,
   SubjectDto,
   WordTypeDto,
-  SignInInput,
   LanguageFolderInput,
   SubjectInput,
 } from '../shared/types/vocab';
@@ -20,7 +19,7 @@ function Options() {
   const [user, setUser] = useState<UserDto | null>(null);
   const [folders, setFolders] = useState<LanguageFolderDto[]>([]);
   const [subjects, setSubjects] = useState<SubjectDto[]>([]);
-  const [wordTypes, setWordTypes] = useState<WordTypeDto[]>([]);
+  const [, setWordTypes] = useState<WordTypeDto[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string>('');
   const [activeSubjectId, setActiveSubjectId] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -29,6 +28,7 @@ function Options() {
   useEffect(() => {
     checkAuth();
     loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
@@ -52,33 +52,48 @@ function Options() {
   const loadFolders = async () => {
     try {
       const data = await apiClient.get('/language-folders/my');
-      const foldersData = (data as { data: LanguageFolderDto[] }).data || data;
+      const foldersData = Array.isArray((data as { data: LanguageFolderDto[] }).data) 
+        ? (data as { data: LanguageFolderDto[] }).data 
+        : Array.isArray(data) 
+          ? data 
+          : [];
       setFolders(foldersData);
       await storage.set('cachedFolders', foldersData);
     } catch (error) {
       console.error('Error loading folders:', error);
+      setFolders([]);
     }
   };
 
   const loadSubjects = async () => {
     try {
       const data = await apiClient.get('/subjects');
-      const subjectsData = (data as { data: SubjectDto[] }).data || data;
+      const subjectsData = Array.isArray((data as { data: SubjectDto[] }).data) 
+        ? (data as { data: SubjectDto[] }).data 
+        : Array.isArray(data) 
+          ? data 
+          : [];
       setSubjects(subjectsData);
       await storage.set('cachedSubjects', subjectsData);
     } catch (error) {
       console.error('Error loading subjects:', error);
+      setSubjects([]);
     }
   };
 
   const loadWordTypes = async () => {
     try {
       const data = await apiClient.get('/word-types');
-      const wordTypesData = (data as { data: WordTypeDto[] }).data || data;
+      const wordTypesData = Array.isArray((data as { data: WordTypeDto[] }).data) 
+        ? (data as { data: WordTypeDto[] }).data 
+        : Array.isArray(data) 
+          ? data 
+          : [];
       setWordTypes(wordTypesData);
       await storage.set('cachedWordTypes', wordTypesData);
     } catch (error) {
       console.error('Error loading word types:', error);
+      setWordTypes([]);
     }
   };
 
@@ -93,8 +108,8 @@ function Options() {
 
     try {
       const loginData: SignInInput = { email, password };
-      const response = await apiClient.post('/auth/signin', loginData);
-      const signInResponse = response as any;
+      const response = await apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/signin', loginData);
+      const signInResponse = response;
 
       await tokenManager.setTokens(
         signInResponse.accessToken,
@@ -109,8 +124,6 @@ function Options() {
       // Auto-create default folder and subject if needed
       await ensureDefaultSettings();
 
-      await loadFolders();
-      await loadSubjects();
       await loadWordTypes();
       setActiveTab('folders');
     } catch (err) {
@@ -132,8 +145,21 @@ function Options() {
   };
 
   const ensureDefaultSettings = async () => {
+    // First, try to fetch existing folders and subjects
+    await loadFolders();
+    await loadSubjects();
+    
+    // Get fresh data from storage to avoid stale state
+    const [cachedFolders, cachedSubjects] = await Promise.all([
+      storage.get('cachedFolders'),
+      storage.get('cachedSubjects'),
+    ]);
+    
+    const currentFolders = Array.isArray(cachedFolders) ? cachedFolders : [];
+    const currentSubjects = Array.isArray(cachedSubjects) ? cachedSubjects : [];
+
     // Check if default folder exists
-    if (folders.length === 0) {
+    if (currentFolders.length === 0) {
       const defaultFolder: LanguageFolderInput = {
         name: 'Default',
         folderColor: '#4CAF50',
@@ -146,15 +172,20 @@ function Options() {
         const folderData = folder as LanguageFolderDto;
         await storage.set('activeFolderId', folderData.id);
         setActiveFolderId(folderData.id);
+        const updatedFolders = [...currentFolders, folderData];
+        setFolders(updatedFolders);
+        await storage.set('cachedFolders', updatedFolders);
       } catch (error) {
         console.error('Error creating default folder:', error);
       }
     } else {
-      setActiveFolderId(folders[0].id);
+      setActiveFolderId(currentFolders[0].id);
     }
 
     // Check if default subject exists
-    if (subjects.length === 0) {
+    const defaultSubjectExists = currentSubjects.find(s => s.name === 'Default');
+    
+    if (!defaultSubjectExists) {
       const defaultSubject: SubjectInput = {
         name: 'Default',
       };
@@ -164,11 +195,31 @@ function Options() {
         const subjectData = subject as SubjectDto;
         await storage.set('activeSubjectId', subjectData.id);
         setActiveSubjectId(subjectData.id);
+        const updatedSubjects = [...currentSubjects, subjectData];
+        setSubjects(updatedSubjects);
+        await storage.set('cachedSubjects', updatedSubjects);
       } catch (error) {
-        console.error('Error creating default subject:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('already exists') || errorMessage.includes('409')) {
+          const subjectsData = await apiClient.get('/subjects');
+          const subjectsList = Array.isArray((subjectsData as { data: SubjectDto[] }).data) 
+            ? (subjectsData as { data: SubjectDto[] }).data 
+            : Array.isArray(subjectsData) 
+              ? subjectsData 
+              : [];
+          const existingDefault = subjectsList.find(s => s.name === 'Default');
+          if (existingDefault) {
+            await storage.set('activeSubjectId', existingDefault.id);
+            setActiveSubjectId(existingDefault.id);
+            setSubjects(subjectsList);
+            await storage.set('cachedSubjects', subjectsList);
+          }
+        } else {
+          console.error('Error creating default subject:', error);
+        }
       }
     } else {
-      setActiveSubjectId(subjects[0].id);
+      setActiveSubjectId(defaultSubjectExists.id);
     }
   };
 
@@ -219,43 +270,60 @@ function Options() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8">Vocab Manager Settings</h1>
+      <div className="min-h-screen bg-linear-to-b from-slate-50 to-slate-100 p-8">
+        <div className="max-w-md mx-auto">
+          <div className="flex items-center justify-center gap-2 mb-8">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+              <BookOpen className="w-7 h-7 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-slate-900">Vocab Manager</h1>
+          </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <LogIn className="w-5 h-5" />
-              Login
-            </h2>
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <LogIn className="w-5 h-5 text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-semibold text-slate-900">Login</h2>
+            </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
+                <label className="block text-sm font-semibold mb-2 text-slate-700">
+                  Email
+                </label>
                 <input
                   type="email"
                   name="email"
                   required
-                  className="w-full px-3 py-2 border rounded"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
+                  placeholder="your@email.com"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Password</label>
+                <label className="block text-sm font-semibold mb-2 text-slate-700">
+                  Password
+                </label>
                 <input
                   type="password"
                   name="password"
                   required
-                  className="w-full px-3 py-2 border rounded"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
+                  placeholder="••••••••"
                 />
               </div>
 
-              {error && <p className="text-red-600 text-sm">{error}</p>}
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-600 text-sm font-medium">{error}</p>
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold shadow-sm"
               >
                 {loading ? 'Logging in...' : 'Login'}
               </button>

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Settings, User } from 'lucide-react';
 import { storage } from '../shared/utils/storage';
-import type { UserDto, LanguageFolderDto, SubjectDto } from '../shared/types/vocab';
+import type { UserDto } from '../shared/types/api';
+import type { LanguageFolderDto, SubjectDto } from '../shared/types/vocab';
 
 function Popup() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -12,12 +13,14 @@ function Popup() {
     loadData();
 
     // Listen for storage changes
-    const unsubscribe = storage.onChanged.addListener(() => {
+    const listener = () => {
       loadData();
-    });
+    };
+    
+    chrome.storage.onChanged.addListener(listener);
 
     return () => {
-      chrome.storage.onChanged.removeListener(unsubscribe);
+      chrome.storage.onChanged.removeListener(listener);
     };
   }, []);
 
@@ -49,17 +52,23 @@ function Popup() {
 
   if (!user) {
     return (
-      <div className="w-80 p-6 bg-gray-50">
-        <h1 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <BookOpen className="w-6 h-6" />
-          Vocab Manager
-        </h1>
-        <p className="text-sm text-gray-600 mb-4">
-          Please log in to start saving vocabulary.
-        </p>
+      <div className="w-80 p-6 bg-linear-to-b from-slate-50 to-white">
+        <div className="flex items-center gap-2 mb-6">
+          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <BookOpen className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-xl font-semibold text-slate-900">Vocab Manager</h1>
+        </div>
+        
+        <div className="mb-6">
+          <p className="text-sm text-slate-600 mb-1">
+            Please log in to start saving vocabulary.
+          </p>
+        </div>
+        
         <button
           onClick={openOptions}
-          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
+          className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 shadow-sm"
         >
           <Settings className="w-4 h-4" />
           Open Settings
@@ -69,50 +78,65 @@ function Popup() {
   }
 
   return (
-    <div className="w-80 p-6 bg-white">
-      <h1 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <BookOpen className="w-6 h-6" />
-        Vocab Manager
-      </h1>
+    <div className="w-80 bg-linear-to-b from-slate-50 to-white">
+      <div className="p-6 border-b border-slate-200">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <BookOpen className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-xl font-semibold text-slate-900">Vocab Manager</h1>
+        </div>
+      </div>
 
-      <div className="space-y-4">
-        <div className="flex items-start gap-3 p-3 bg-gray-50 rounded">
-          <User className="w-5 h-5 text-gray-600 mt-0.5" />
+      <div className="p-6 space-y-4">
+        <div className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
+          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+            <User className="w-4 h-4 text-blue-600" />
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-sm font-medium text-slate-900 truncate">
               {user.name || user.email}
             </p>
-            <p className="text-xs text-gray-500">{user.email}</p>
+            <p className="text-xs text-slate-500 truncate">{user.email}</p>
           </div>
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-medium text-gray-500">Active Settings</div>
+          <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+            Active Settings
+          </div>
           
-          {folder && (
-            <div className="p-2 bg-blue-50 rounded text-sm">
-              <div className="font-medium">Folder</div>
-              <div className="text-gray-600">{folder.name}</div>
-            </div>
-          )}
+          <div className="space-y-2">
+            {folder && (
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <div className="text-xs font-medium text-blue-900 mb-0.5">Folder</div>
+                <div className="text-sm font-medium text-blue-700">{folder.name}</div>
+                <div className="text-xs text-blue-600 mt-0.5">
+                  {folder.sourceLanguageCode} → {folder.targetLanguageCode}
+                </div>
+              </div>
+            )}
 
-          {subject && (
-            <div className="p-2 bg-green-50 rounded text-sm">
-              <div className="font-medium">Subject</div>
-              <div className="text-gray-600">{subject.name}</div>
-            </div>
-          )}
+            {subject && (
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
+                <div className="text-xs font-medium text-emerald-900 mb-0.5">Subject</div>
+                <div className="text-sm font-medium text-emerald-700">{subject.name}</div>
+              </div>
+            )}
 
-          {(!folder || !subject) && (
-            <p className="text-xs text-gray-500">
-              Please configure your folder and subject in settings.
-            </p>
-          )}
+            {(!folder || !subject) && (
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                <p className="text-xs text-amber-800">
+                  Please configure your folder and subject in settings.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         <button
           onClick={openOptions}
-          className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
+          className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 shadow-sm"
         >
           <Settings className="w-4 h-4" />
           Open Settings

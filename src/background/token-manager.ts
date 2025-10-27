@@ -1,5 +1,5 @@
 import { storage } from "../shared/utils/storage";
-import { STORAGE_KEYS } from "../shared/constants";
+import { API_BASE_URL } from "../shared/constants";
 
 export class TokenManager {
   private refreshPromise: Promise<string> | null = null;
@@ -37,18 +37,13 @@ export class TokenManager {
           return null;
         }
 
-        const response = await fetch(
-          `${
-            import.meta.env.VITE_API_BASE_URL || "http://localhost:3000"
-          }/auth/refresh`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ refreshToken }),
-          }
-        );
+        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
 
         if (!response.ok) {
           await this.clearTokens();

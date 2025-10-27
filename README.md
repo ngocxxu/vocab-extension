@@ -57,7 +57,7 @@ This will start the Vite dev server and watch for changes.
 The extension connects to a backend API. Configure the base URL in `src/shared/constants.ts`:
 
 ```typescript
-export const API_BASE_URL = "http://localhost:3000";
+export const API_BASE_URL = "http://localhost:3002";
 ```
 
 ### Required Backend Endpoints
