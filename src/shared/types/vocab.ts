@@ -62,3 +62,14 @@ export interface VocabDto {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface IResponse<T> {
+  items: T[];
+  statusCode: number;
+}
+
+export interface LanguageDto {
+  id: string;
+  code: string;
+  name: string;
+}

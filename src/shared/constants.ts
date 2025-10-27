@@ -30,4 +30,7 @@ export const API_ENDPOINTS = {
   VOCABS: {
     CREATE: "/vocabs",
   },
+  LANGUAGES: {
+    LIST: "/languages",
+  },
 } as const;

@@ -1,16 +1,9 @@
-import { useState, useEffect } from 'react';
-import { LogIn, FolderTree, Tag, LogOut, Save, BookOpen } from 'lucide-react';
+import { BookOpen, FolderTree, LogIn, LogOut, Save, Tag } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { apiClient } from '../background/api-client';
-import { storage } from '../shared/utils/storage';
 import { tokenManager } from '../background/token-manager';
-import type { UserDto, SignInInput } from '../shared/types/api';
-import type {
-  LanguageFolderDto,
-  SubjectDto,
-  WordTypeDto,
-  LanguageFolderInput,
-  SubjectInput,
-} from '../shared/types/vocab';
+import { Input } from '../components/ui/input';
+import { MultiSelect } from '../components/ui/multi-select';
 import {
   Select,
   SelectContent,
@@ -18,7 +11,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { MultiSelect } from '../components/ui/multi-select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import type { SignInInput, UserDto } from '../shared/types/api';
+import type {
+  IResponse,
+  LanguageDto,
+  LanguageFolderDto,
+  LanguageFolderInput,
+  SubjectDto,
+  SubjectInput,
+  WordTypeDto,
+} from '../shared/types/vocab';
+import { storage } from '../shared/utils/storage';
 
 type Tab = 'login' | 'folders' | 'subjects';
 
@@ -27,6 +31,9 @@ function Options() {
   const [user, setUser] = useState<UserDto | null>(null);
   const [folders, setFolders] = useState<LanguageFolderDto[]>([]);
   const [subjects, setSubjects] = useState<SubjectDto[]>([]);
+  const [languages, setLanguages] = useState<LanguageDto[]>([]);
+  const [selectedSourceLang, setSelectedSourceLang] = useState<string>('');
+  const [selectedTargetLang, setSelectedTargetLang] = useState<string>('');
   const [, setWordTypes] = useState<WordTypeDto[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string>('');
   const [activeSubjectIds, setActiveSubjectIds] = useState<string[]>([]);
@@ -36,6 +43,20 @@ function Options() {
   useEffect(() => {
     checkAuth();
     loadSettings();
+
+    const handleLogoutMessage = () => {
+      handleLogout();
+    };
+
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'LOGOUT') {
+        handleLogoutMessage();
+      }
+    });
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleLogoutMessage);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -43,6 +64,7 @@ function Options() {
     const userData = await storage.get('user');
     if (userData) {
       setUser(userData);
+      await loadLanguages();
       await loadFolders();
       await loadSubjects();
     }
@@ -69,44 +91,62 @@ function Options() {
 
   const loadFolders = async () => {
     try {
-      const data = await apiClient.get('/language-folders/my');
-      const foldersData = Array.isArray((data as { data: LanguageFolderDto[] }).data) 
-        ? (data as { data: LanguageFolderDto[] }).data 
-        : Array.isArray(data) 
-          ? data 
-          : [];
+      const data = await apiClient.get<IResponse<LanguageFolderDto>>('/language-folders/my');
+      const foldersData = data.items || [];
       setFolders(foldersData);
       await storage.set('cachedFolders', foldersData);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Error loading folders:', error);
+      
+      if (errorMessage.includes('Session expired')) {
+        await handleLogout();
+      }
+      
       setFolders([]);
     }
   };
 
   const loadSubjects = async () => {
     try {
-      const data = await apiClient.get('/subjects');
-      const subjectsData = Array.isArray((data as { data: SubjectDto[] }).data) 
-        ? (data as { data: SubjectDto[] }).data 
-        : Array.isArray(data) 
-          ? data 
-          : [];
+      const data = await apiClient.get<IResponse<SubjectDto>>('/subjects');
+      const subjectsData = data.items || [];
       setSubjects(subjectsData);
       await storage.set('cachedSubjects', subjectsData);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Error loading subjects:', error);
+      
+      if (errorMessage.includes('Session expired')) {
+        await handleLogout();
+      }
+      
       setSubjects([]);
+    }
+  };
+
+  const loadLanguages = async () => {
+    try {
+      const data = await apiClient.get<IResponse<LanguageDto>>('/languages');
+      const languagesData = data.items || [];
+      setLanguages(languagesData);
+      await storage.set('cachedLanguages', languagesData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error loading languages:', error);
+      
+      if (errorMessage.includes('Session expired')) {
+        await handleLogout();
+      }
+      
+      setLanguages([]);
     }
   };
 
   const loadWordTypes = async () => {
     try {
-      const data = await apiClient.get('/word-types');
-      const wordTypesData = Array.isArray((data as { data: WordTypeDto[] }).data) 
-        ? (data as { data: WordTypeDto[] }).data 
-        : Array.isArray(data) 
-          ? data 
-          : [];
+      const data = await apiClient.get<IResponse<WordTypeDto>>('/word-types');
+      const wordTypesData = data.items || [];
       setWordTypes(wordTypesData);
       await storage.set('cachedWordTypes', wordTypesData);
     } catch (error) {
@@ -134,18 +174,24 @@ function Options() {
         signInResponse.refreshToken
       );
 
-      const verifyResponse = await apiClient.get('/auth/verify');
-      const userData = verifyResponse as UserDto;
+      const verifyResponse = await apiClient.get<UserDto>('/auth/verify');
+      const userData = verifyResponse
       await storage.set('user', userData);
       setUser(userData);
 
       // Auto-create default folder and subject if needed
       await ensureDefaultSettings();
 
+      await loadLanguages();
       await loadWordTypes();
       setActiveTab('folders');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
+      setError(errorMessage);
+      
+      if (errorMessage.includes('Session expired')) {
+        await handleLogout();
+      }
     } finally {
       setLoading(false);
     }
@@ -310,11 +356,10 @@ function Options() {
                 <label className="block text-sm font-semibold mb-2 text-slate-700">
                   Email
                 </label>
-                <input
+                <Input
                   type="email"
                   name="email"
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
                   placeholder="your@email.com"
                 />
               </div>
@@ -323,11 +368,10 @@ function Options() {
                 <label className="block text-sm font-semibold mb-2 text-slate-700">
                   Password
                 </label>
-                <input
+                <Input
                   type="password"
                   name="password"
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
                   placeholder="••••••••"
                 />
               </div>
@@ -378,41 +422,27 @@ function Options() {
                 <BookOpen className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="font-semibold text-slate-900">{user.name || 'User'}</p>
+                <p className="font-semibold text-slate-900">{user.firstName + ' ' + user.lastName || 'User'}</p>
                 <p className="text-sm text-slate-600">{user.email}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-            <div className="flex border-b border-slate-200">
-              {(['folders', 'subjects'] as Tab[]).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 px-6 py-4 border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-blue-600 text-blue-600 font-semibold'
-                      : 'border-transparent text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {tab === 'folders' ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <FolderTree className="w-4 h-4" />
-                      Folders
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <Tag className="w-4 h-4" />
-                      Subjects
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)} className="w-full">
+            <TabsList className="w-full grid grid-cols-2 rounded-t-xl rounded-b-none">
+              <TabsTrigger value="folders" className="flex items-center justify-center gap-2">
+                <FolderTree className="w-4 h-4" />
+                Folders
+              </TabsTrigger>
+              <TabsTrigger value="subjects" className="flex items-center justify-center gap-2">
+                <Tag className="w-4 h-4" />
+                Subjects
+              </TabsTrigger>
+            </TabsList>
 
-            <div className="p-6">
-            {activeTab === 'folders' && (
+            <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200">
+              <div className="p-6">
+              <TabsContent value="folders" className="mt-0">
               <div className="space-y-8">
                 <div>
                   <h3 className="text-lg font-semibold mb-3 text-slate-900">Select Active Folder</h3>
@@ -426,7 +456,7 @@ function Options() {
                         <SelectItem key={folder.id} value={folder.id}>
                           <div className="flex items-center gap-3">
                             <div
-                              className="w-4 h-4 rounded-full flex-shrink-0"
+                              className="w-4 h-4 rounded-full shrink-0"
                               style={{ backgroundColor: folder.folderColor }}
                             />
                             <div className="flex-1">
@@ -449,44 +479,61 @@ function Options() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold mb-2 text-slate-900">Name</label>
-                        <input
-                          type="text"
+                        <Input
                           name="name"
                           required
-                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
                           placeholder="e.g., English → Vietnamese"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-semibold mb-2 text-slate-900">Color</label>
-                        <input
+                        <Input
                           type="color"
                           name="color"
                           defaultValue="#4CAF50"
-                          className="w-full h-11 rounded-lg border border-slate-300 cursor-pointer"
                         />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold mb-2 text-slate-900">Source Language</label>
-                        <input
-                          type="text"
+                        <Select
                           name="sourceLanguage"
-                          placeholder="en"
+                          value={selectedSourceLang}
+                          onValueChange={setSelectedSourceLang}
                           required
-                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
-                        />
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select language" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {languages.filter(lang => lang.code !== selectedTargetLang).map(lang => (
+                              <SelectItem key={lang.id} value={lang.code}>
+                                {lang.name} ({lang.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
                         <label className="block text-sm font-semibold mb-2 text-slate-900">Target Language</label>
-                        <input
-                          type="text"
+                        <Select
                           name="targetLanguage"
-                          placeholder="vi"
+                          value={selectedTargetLang}
+                          onValueChange={setSelectedTargetLang}
                           required
-                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
-                        />
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select language" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {languages.filter(lang => lang.code !== selectedSourceLang).map(lang => (
+                              <SelectItem key={lang.id} value={lang.code}>
+                                {lang.name} ({lang.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <button
@@ -498,10 +545,10 @@ function Options() {
                   </form>
                 </div>
               </div>
-            )}
+              </TabsContent>
 
-            {activeTab === 'subjects' && (
-              <div className="space-y-8">
+              <TabsContent value="subjects" className="mt-0">
+                <div className="space-y-8">
                 <div>
                   <h3 className="text-lg font-semibold mb-3 text-slate-900">Select Active Subjects</h3>
                   <p className="text-sm text-slate-600 mb-4">Choose which subjects to categorize your vocabulary</p>
@@ -511,6 +558,7 @@ function Options() {
                     defaultValue={activeSubjectIds}
                     placeholder="Select subjects"
                     maxCount={3}
+                    searchable={true}
                   />
                 </div>
 
@@ -520,11 +568,9 @@ function Options() {
                   <form onSubmit={handleCreateSubject} className="space-y-4">
                     <div>
                       <label className="block text-sm font-semibold mb-2 text-slate-900">Name</label>
-                      <input
-                        type="text"
+                      <Input
                         name="name"
                         required
-                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors outline-none"
                         placeholder="e.g., Business, Travel, Technology"
                       />
                     </div>
@@ -537,10 +583,11 @@ function Options() {
                   </form>
                 </div>
               </div>
-            )}
+              </TabsContent>
+              </div>
             </div>
 
-            <div className="border-t border-slate-200 p-6">
+            <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200 border-t border-slate-200 p-6">
               <button
                 onClick={handleSaveSettings}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2 shadow-sm"
@@ -549,7 +596,7 @@ function Options() {
                 Save Settings
               </button>
             </div>
-          </div>
+          </Tabs>
         </div>
       </div>
 

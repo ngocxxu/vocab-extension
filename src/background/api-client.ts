@@ -10,35 +10,26 @@ export class ApiClient {
   }
 
   async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    let token = await tokenManager.getAccessToken();
+    const token = await tokenManager.getAccessToken();
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
       headers: {
-        ...getAuthHeaders(token),
+        ...getAuthHeaders(token || undefined),
         ...options.headers,
       },
     });
 
-    if (response.status === 401) {
-      const newToken = await tokenManager.refreshAccessToken();
-      if (!newToken) {
-        throw new Error("Authentication failed");
-      }
+    if (response.status === 401 || response.status === 403) {
+      await tokenManager.clearTokens();
 
-      const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
-        ...options,
-        headers: {
-          ...getAuthHeaders(newToken),
-          ...options.headers,
-        },
+      chrome.storage.local.clear();
+
+      chrome.runtime.sendMessage({
+        type: "LOGOUT",
       });
 
-      if (!retryResponse.ok) {
-        throw new Error(`API request failed: ${retryResponse.statusText}`);
-      }
-
-      return retryResponse.json();
+      throw new Error("Session expired. Please login again.");
     }
 
     if (!response.ok) {

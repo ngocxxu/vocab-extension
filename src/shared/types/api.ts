@@ -16,14 +16,15 @@ export interface SessionDto {
 export interface UserDto {
   id: string;
   email: string;
-  name?: string;
-  role: UserRole;
-}
-
-export enum UserRole {
-  ADMIN = "ADMIN",
-  STAFF = "STAFF",
-  USER = "USER",
+  phone: string;
+  createdAt: Date;
+  updatedAt: Date;
+  firstName: string;
+  lastName: string;
+  avatar?: string;
+  role: string;
+  isActive: boolean;
+  supabaseUserId: string;
 }
 
 export interface ApiResponse<T> {

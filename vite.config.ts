@@ -1,6 +1,8 @@
+import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { crx } from "@crxjs/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
 import manifest from "./manifest.config";
 import type { Plugin } from "vite";
 
@@ -26,10 +28,10 @@ const fixHMRPortPlugin = (): Plugin => {
 };
 
 export default defineConfig({
-  plugins: [react(), crx({ manifest }), fixHMRPortPlugin()],
+  plugins: [react(), tailwindcss(), crx({ manifest }), fixHMRPortPlugin()],
   resolve: {
     alias: {
-      "@": "/src",
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });

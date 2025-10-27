@@ -1,8 +1,9 @@
+import type { UserDto } from "./api";
 import type {
-  UserDto,
   LanguageFolderDto,
   SubjectDto,
   WordTypeDto,
+  LanguageDto,
 } from "./vocab";
 
 export interface StorageData {
@@ -16,4 +17,5 @@ export interface StorageData {
   cachedFolders?: LanguageFolderDto[];
   cachedSubjects?: SubjectDto[];
   cachedWordTypes?: WordTypeDto[];
+  cachedLanguages?: LanguageDto[];
 }
