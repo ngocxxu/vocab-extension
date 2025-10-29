@@ -17,10 +17,38 @@ export function setupContextMenu() {
     if (info.menuItemId === "add-to-vocab" && info.selectionText) {
       try {
         const selectedText = info.selectionText;
-        const folderId = await storage.get("activeFolderId");
-        const subjectIds = (await storage.get("activeSubjectIds")) as
-          | string[]
-          | undefined;
+
+        const user = await storage.get("user");
+
+        if (!user) {
+          chrome.notifications.create({
+            type: "basic",
+            iconUrl: chrome.runtime.getURL("icons/icon48.png"),
+            title: "⚠️ Login Required",
+            message: "Please login first to add vocabulary",
+          });
+          return;
+        }
+
+        const folderKey = `activeFolderId_${user.id}`;
+        const subjectIdsKey = `activeSubjectIds_${user.id}`;
+        const result = await chrome.storage.local.get([
+          folderKey,
+          subjectIdsKey,
+        ]);
+
+        if (chrome.runtime.lastError) {
+          chrome.notifications.create({
+            type: "basic",
+            iconUrl: chrome.runtime.getURL("icons/icon48.png"),
+            title: "⚠️ Storage Error",
+            message: "Unable to read settings. Please check storage space.",
+          });
+          return;
+        }
+
+        const folderId = result[folderKey];
+        const subjectIds = result[subjectIdsKey] as string[] | undefined;
 
         if (!folderId || !subjectIds || subjectIds.length === 0) {
           chrome.notifications.create({

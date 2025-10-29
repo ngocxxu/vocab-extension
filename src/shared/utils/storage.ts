@@ -4,7 +4,7 @@ export const storage = {
   async get<T extends keyof StorageData>(
     key: T
   ): Promise<StorageData[T] | undefined> {
-    const result = await chrome.storage.local.get(key);
+    const result = await chrome.storage.local.get([key]);
     return result[key];
   },
 

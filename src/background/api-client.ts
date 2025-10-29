@@ -14,6 +14,7 @@ export class ApiClient {
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
+      credentials: "include",
       headers: {
         ...getAuthHeaders(token || undefined),
         ...options.headers,
@@ -21,14 +22,41 @@ export class ApiClient {
     });
 
     if (response.status === 401 || response.status === 403) {
+      const newToken = await tokenManager.refreshAccessToken();
+
+      if (newToken) {
+        const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
+          ...options,
+          credentials: "include",
+          headers: {
+            ...getAuthHeaders(newToken),
+            ...options.headers,
+          },
+        });
+
+        if (!retryResponse.ok) {
+          if (retryResponse.status === 401 || retryResponse.status === 403) {
+            await tokenManager.clearTokens();
+            chrome.runtime.sendMessage({
+              type: "LOGOUT",
+            });
+            throw new Error("Session expired. Please login again.");
+          }
+          const error = await retryResponse
+            .json()
+            .catch(() => ({ message: retryResponse.statusText }));
+          throw new Error(
+            error.message || `API request failed: ${retryResponse.statusText}`
+          );
+        }
+
+        return retryResponse.json();
+      }
+
       await tokenManager.clearTokens();
-
-      chrome.storage.local.clear();
-
       chrome.runtime.sendMessage({
         type: "LOGOUT",
       });
-
       throw new Error("Session expired. Please login again.");
     }
 

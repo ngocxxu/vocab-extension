@@ -25,25 +25,49 @@ function Popup() {
   }, []);
 
   const loadData = async () => {
-    const [userData, folderId, subjectIds] = await Promise.all([
-      storage.get('user'),
-      storage.get('activeFolderId'),
-      storage.get('activeSubjectIds'),
-    ]);
-
+    const userData = await storage.get('user');
     setUser(userData || null);
 
-    if (folderId) {
-      const folders = await storage.get('cachedFolders') || [];
-      const activeFolder = folders.find((f) => f.id === folderId);
-      setFolder(activeFolder || null);
+    if (!userData) {
+      setFolder(null);
+      setSubjects([]);
+      return;
     }
 
-    if (subjectIds && Array.isArray(subjectIds) && subjectIds.length > 0) {
-      const allSubjects = await storage.get('cachedSubjects') || [];
-      const activeSubjects = allSubjects.filter((s) => subjectIds.includes(s.id));
-      setSubjects(activeSubjects);
-    } else {
+    const folderKey = `activeFolderId_${userData.id}`;
+    const subjectIdsKey = `activeSubjectIds_${userData.id}`;
+
+    try {
+      const result = await chrome.storage.local.get([folderKey, subjectIdsKey]);
+      
+      if (chrome.runtime.lastError) {
+        console.error('Error loading user settings:', chrome.runtime.lastError);
+        setFolder(null);
+        setSubjects([]);
+        return;
+      }
+      
+      const folderId = result[folderKey];
+      const subjectIds = result[subjectIdsKey];
+
+      if (folderId) {
+        const folders = await storage.get('cachedFolders') || [];
+        const activeFolder = folders.find((f) => f.id === folderId);
+        setFolder(activeFolder || null);
+      } else {
+        setFolder(null);
+      }
+
+      if (subjectIds && Array.isArray(subjectIds) && subjectIds.length > 0) {
+        const allSubjects = await storage.get('cachedSubjects') || [];
+        const activeSubjects = allSubjects.filter((s) => subjectIds.includes(s.id));
+        setSubjects(activeSubjects);
+      } else {
+        setSubjects([]);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setFolder(null);
       setSubjects([]);
     }
   };

@@ -39,6 +39,7 @@ export class TokenManager {
 
         const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
           },

@@ -40,9 +40,131 @@ function Options() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
+  const getUserSettingsKey = (userId: string, key: string) => `${key}_${userId}`;
+
+  const cleanupOldUserSettings = async () => {
+    try {
+      const userData = await storage.get('user');
+      if (!userData) {
+        return;
+      }
+      
+      const allData = await chrome.storage.local.get(null);
+      if (chrome.runtime.lastError) {
+        console.error('Error getting all storage data:', chrome.runtime.lastError);
+        return;
+      }
+      
+      const currentUserId = userData.id;
+      const userSettingsKeys: string[] = [];
+      
+      for (const key in allData) {
+        if (key.startsWith('activeFolderId_') || key.startsWith('activeSubjectIds_')) {
+          const userId = key.split('_')[1];
+          if (userId && userId !== currentUserId) {
+            userSettingsKeys.push(key);
+          }
+        }
+      }
+      
+      if (userSettingsKeys.length > 0) {
+        await chrome.storage.local.remove(userSettingsKeys);
+        if (chrome.runtime.lastError) {
+          console.error('Error cleaning up old user settings:', chrome.runtime.lastError);
+        }
+      }
+    } catch (error) {
+      console.error('Error cleaning up old user settings:', error);
+    }
+  };
+
+  const loadUserSettings = async (userId: string) => {
+    const folderKey = getUserSettingsKey(userId, 'activeFolderId');
+    const subjectIdsKey = getUserSettingsKey(userId, 'activeSubjectIds');
+    const legacySubjectIdKey = getUserSettingsKey(userId, 'activeSubjectId');
+
+    try {
+      const result = await chrome.storage.local.get([folderKey, subjectIdsKey, legacySubjectIdKey]);
+      
+      if (chrome.runtime.lastError) {
+        console.error('Error loading user settings:', chrome.runtime.lastError);
+        setActiveFolderId('');
+        setActiveSubjectIds([]);
+        return;
+      }
+      
+      const folderId = result[folderKey] || '';
+      const subjectIds = result[subjectIdsKey];
+      const legacySubjectId = result[legacySubjectIdKey];
+
+      setActiveFolderId(folderId);
+
+      if (subjectIds && Array.isArray(subjectIds)) {
+        setActiveSubjectIds(subjectIds);
+      } else if (legacySubjectId) {
+        setActiveSubjectIds([legacySubjectId]);
+        try {
+          await chrome.storage.local.set({ [subjectIdsKey]: [legacySubjectId] });
+          await chrome.storage.local.remove(legacySubjectIdKey);
+          
+          if (chrome.runtime.lastError) {
+            console.error('Error migrating legacy subject ID:', chrome.runtime.lastError);
+          }
+        } catch (error) {
+          console.error('Error migrating legacy subject ID:', error);
+        }
+      } else {
+        setActiveSubjectIds([]);
+      }
+    } catch (error) {
+      console.error('Error loading user settings:', error);
+      setActiveFolderId('');
+      setActiveSubjectIds([]);
+    }
+  };
+
+  const saveUserSettings = async (userId: string, folderId: string, subjectIds: string[]) => {
+    const folderKey = getUserSettingsKey(userId, 'activeFolderId');
+    const subjectIdsKey = getUserSettingsKey(userId, 'activeSubjectIds');
+    
+    try {
+      await chrome.storage.local.set({
+        [folderKey]: folderId,
+        [subjectIdsKey]: subjectIds,
+      });
+      
+      if (chrome.runtime.lastError) {
+        const errorMessage = chrome.runtime.lastError.message;
+        if (errorMessage?.includes('QUOTA_BYTES') || errorMessage?.includes('quota')) {
+          await cleanupOldUserSettings();
+          
+          try {
+            await chrome.storage.local.set({
+              [folderKey]: folderId,
+              [subjectIdsKey]: subjectIds,
+            });
+            
+            if (chrome.runtime.lastError) {
+              throw new Error('Storage quota exceeded. Unable to save settings.');
+            }
+          } catch {
+            throw new Error('Unable to save settings. Storage is full.');
+          }
+        } else {
+          throw new Error(errorMessage || 'Failed to save settings');
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes('quota') && !errorMessage.includes('QUOTA_BYTES')) {
+        throw error;
+      }
+      throw new Error(errorMessage || 'Storage quota exceeded');
+    }
+  };
+
   useEffect(() => {
     checkAuth();
-    loadSettings();
 
     const handleLogoutMessage = () => {
       handleLogout();
@@ -67,25 +189,7 @@ function Options() {
       await loadLanguages();
       await loadFolders();
       await loadSubjects();
-    }
-  };
-
-  const loadSettings = async () => {
-    const [folderId, subjectIds, legacySubjectId] = await Promise.all([
-      storage.get('activeFolderId'),
-      storage.get('activeSubjectIds'),
-      storage.get('activeSubjectId'),
-    ]);
-    setActiveFolderId(folderId || '');
-    
-    if (subjectIds && Array.isArray(subjectIds)) {
-      setActiveSubjectIds(subjectIds);
-    } else if (legacySubjectId) {
-      setActiveSubjectIds([legacySubjectId]);
-      await storage.set('activeSubjectIds', [legacySubjectId]);
-      await storage.remove(['activeSubjectId']);
-    } else {
-      setActiveSubjectIds([]);
+      await loadUserSettings(userData.id);
     }
   };
 
@@ -179,11 +283,14 @@ function Options() {
       await storage.set('user', userData);
       setUser(userData);
 
-      // Auto-create default folder and subject if needed
-      await ensureDefaultSettings();
+      await Promise.all([
+        loadLanguages(),
+        loadWordTypes(),
+        loadFolders(),
+        loadSubjects(),
+      ]);
 
-      await loadLanguages();
-      await loadWordTypes();
+      await loadUserSettings(userData.id);
       setActiveTab('folders');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Login failed';
@@ -206,85 +313,6 @@ function Options() {
     setActiveFolderId('');
     setActiveSubjectIds([]);
     setActiveTab('login');
-  };
-
-  const ensureDefaultSettings = async () => {
-    // First, try to fetch existing folders and subjects
-    await loadFolders();
-    await loadSubjects();
-    
-    // Get fresh data from storage to avoid stale state
-    const [cachedFolders, cachedSubjects] = await Promise.all([
-      storage.get('cachedFolders'),
-      storage.get('cachedSubjects'),
-    ]);
-    
-    const currentFolders = Array.isArray(cachedFolders) ? cachedFolders : [];
-    const currentSubjects = Array.isArray(cachedSubjects) ? cachedSubjects : [];
-
-    // Check if default folder exists
-    if (currentFolders.length === 0) {
-      const defaultFolder: LanguageFolderInput = {
-        name: 'Default',
-        folderColor: '#4CAF50',
-        sourceLanguageCode: 'en',
-        targetLanguageCode: 'vi',
-      };
-
-      try {
-        const folder = await apiClient.post('/language-folders', defaultFolder);
-        const folderData = folder as LanguageFolderDto;
-        await storage.set('activeFolderId', folderData.id);
-        setActiveFolderId(folderData.id);
-        const updatedFolders = [...currentFolders, folderData];
-        setFolders(updatedFolders);
-        await storage.set('cachedFolders', updatedFolders);
-      } catch (error) {
-        console.error('Error creating default folder:', error);
-      }
-    } else {
-      setActiveFolderId(currentFolders[0].id);
-    }
-
-    // Check if default subject exists
-    const defaultSubjectExists = currentSubjects.find(s => s.name === 'Default');
-    
-    if (!defaultSubjectExists) {
-      const defaultSubject: SubjectInput = {
-        name: 'Default',
-      };
-
-      try {
-        const subject = await apiClient.post('/subjects', defaultSubject);
-        const subjectData = subject as SubjectDto;
-        await storage.set('activeSubjectIds', [subjectData.id]);
-        setActiveSubjectIds([subjectData.id]);
-        const updatedSubjects = [...currentSubjects, subjectData];
-        setSubjects(updatedSubjects);
-        await storage.set('cachedSubjects', updatedSubjects);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('already exists') || errorMessage.includes('409')) {
-          const subjectsData = await apiClient.get('/subjects');
-          const subjectsList = Array.isArray((subjectsData as { data: SubjectDto[] }).data) 
-            ? (subjectsData as { data: SubjectDto[] }).data 
-            : Array.isArray(subjectsData) 
-              ? subjectsData 
-              : [];
-          const existingDefault = subjectsList.find(s => s.name === 'Default');
-          if (existingDefault) {
-            await storage.set('activeSubjectIds', [existingDefault.id]);
-            setActiveSubjectIds([existingDefault.id]);
-            setSubjects(subjectsList);
-            await storage.set('cachedSubjects', subjectsList);
-          }
-        } else {
-          console.error('Error creating default subject:', error);
-        }
-      }
-    } else {
-      setActiveSubjectIds([defaultSubjectExists.id]);
-    }
   };
 
   const handleCreateFolder = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -337,7 +365,13 @@ function Options() {
       return;
     }
 
+    if (!user) {
+      setError('User not found. Please login again.');
+      return;
+    }
+
     try {
+      await saveUserSettings(user.id, activeFolderId, activeSubjectIds);
       await storage.set('activeFolderId', activeFolderId);
       await storage.set('activeSubjectIds', activeSubjectIds);
       setError('');
