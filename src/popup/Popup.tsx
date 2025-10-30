@@ -12,6 +12,7 @@ import {
 } from "../components/ui/select";
 import { MultiSelect } from "../components/ui/multi-select";
 import { Button } from "@/components/ui/button";
+import AuthForm from "../components/auth/AuthForm";
 
 function Popup() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -237,32 +238,7 @@ function Popup() {
   };
 
   if (!user) {
-    return (
-      <div className="w-80 p-6 bg-gradient-to-b from-slate-50 to-white">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center shadow-md">
-            <span className="text-lg font-bold text-white">V</span>
-          </div>
-          <h1 className="text-xl font-semibold text-slate-900">
-            Vocab Manager
-          </h1>
-        </div>
-
-        <div className="mb-6">
-          <p className="text-sm text-slate-600 mb-1">
-            Please log in to start saving vocabulary.
-          </p>
-        </div>
-
-        <button
-          onClick={openOptions}
-          className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 shadow-sm"
-        >
-          <Settings className="w-4 h-4" />
-          Open Settings
-        </button>
-      </div>
-    );
+    return <AuthForm variant="popup" onSuccess={loadData} />;
   }
 
   return (
@@ -305,14 +281,7 @@ function Popup() {
                     Please configure your folder and subject in settings.
                   </p>
                 </div>
-
-                <button
-                  onClick={openOptions}
-                  className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 shadow-sm"
-                >
-                  <Settings className="w-4 h-4" />
-                  Open Settings
-                </button>
+             
               </>
             )}
           </div>

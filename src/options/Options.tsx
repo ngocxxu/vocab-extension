@@ -1,4 +1,4 @@
-import { BookOpen, ChevronDown, ChevronUp, LogIn, LogOut, Plus, Save, Tag } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, LogOut, Plus, Save, Tag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient } from '../background/api-client';
@@ -14,7 +14,7 @@ import {
 } from '../components/ui/select';
 import { Separator } from '../components/ui/separator';
 import { Toaster } from '../components/ui/sonner';
-import type { SignInInput, UserDto } from '../shared/types/api';
+import type { UserDto } from '../shared/types/api';
 import type {
   IResponse,
   LanguageDto,
@@ -25,6 +25,7 @@ import type {
   WordTypeDto,
 } from '../shared/types/vocab';
 import { storage } from '../shared/utils/storage';
+import AuthForm from '../components/auth/AuthForm';
 
 function Options() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -36,7 +37,7 @@ function Options() {
   const [, setWordTypes] = useState<WordTypeDto[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string>('');
   const [activeSubjectIds, setActiveSubjectIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+  
   const [error, setError] = useState<string>('');
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isCreateSubjectOpen, setIsCreateSubjectOpen] = useState(false);
@@ -195,6 +196,18 @@ function Options() {
     }
   };
 
+  const handleAuthSuccess = async (newUser: UserDto) => {
+    setUser(newUser);
+    setError('');
+    await Promise.all([
+      loadLanguages(),
+      loadWordTypes(),
+      loadFolders(),
+      loadSubjects(),
+    ]);
+    await loadUserSettings(newUser.id);
+  };
+
   const loadFolders = async () => {
     try {
       const data = await apiClient.get<IResponse<LanguageFolderDto>>('/language-folders/my');
@@ -261,49 +274,7 @@ function Options() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
-
-    try {
-      const loginData: SignInInput = { email, password };
-      const response = await apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/signin', loginData);
-      const signInResponse = response;
-
-      await tokenManager.setTokens(
-        signInResponse.accessToken,
-        signInResponse.refreshToken
-      );
-
-      const verifyResponse = await apiClient.get<UserDto>('/auth/verify');
-      const userData = verifyResponse
-      await storage.set('user', userData);
-      setUser(userData);
-
-      await Promise.all([
-        loadLanguages(),
-        loadWordTypes(),
-        loadFolders(),
-        loadSubjects(),
-      ]);
-
-      await loadUserSettings(userData.id);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Login failed';
-      setError(errorMessage);
-      
-      if (errorMessage.includes('Session expired')) {
-        await handleLogout();
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  
 
   const handleLogout = async () => {
     await tokenManager.clearTokens();
@@ -396,63 +367,7 @@ function Options() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-8">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-center gap-2 mb-8">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-white">V</span>
-            </div>
-            <h1 className="text-3xl font-bold text-slate-900">Vocab Manager</h1>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <LogIn className="w-5 h-5 text-blue-600" />
-              </div>
-              <h2 className="text-2xl font-semibold text-slate-900">Login</h2>
-            </div>
-
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-slate-700">
-                  Email
-                </label>
-                <Input
-                  type="email"
-                  name="email"
-                  required
-                  placeholder="your@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-slate-700">
-                  Password
-                </label>
-                <Input
-                  type="password"
-                  name="password"
-                  required
-                  placeholder="••••••••"
-                />
-              </div>
-
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-600 text-sm font-medium">{error}</p>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold shadow-sm"
-              >
-                {loading ? 'Logging in...' : 'Login'}
-              </button>
-            </form>
-          </div>
-        </div>
+          <AuthForm variant="options" onSuccess={handleAuthSuccess} />
       </div>
     );
   }
