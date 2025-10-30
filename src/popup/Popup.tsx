@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Settings, User, Save } from "lucide-react";
+import { Settings, User, Save, LogOut, Menu } from "lucide-react";
 import { storage } from "../shared/utils/storage";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { apiClient } from "../background/api-client";
+import { tokenManager } from "../background/token-manager";
+import { API_ENDPOINTS } from "../shared/constants";
 import type { UserDto } from "../shared/types/api";
 import type { LanguageFolderDto, SubjectDto } from "../shared/types/vocab";
 import {
@@ -237,6 +241,15 @@ function Popup() {
     chrome.runtime.openOptionsPage();
   };
 
+  const handleLogout = async () => {
+    try {
+      await apiClient.post(API_ENDPOINTS.AUTH.SIGNOUT).catch(() => {});
+    } finally {
+      await tokenManager.clearTokens();
+      setUser(null);
+    }
+  };
+
   if (!user) {
     return <AuthForm variant="popup" onSuccess={loadData} />;
   }
@@ -267,9 +280,24 @@ function Popup() {
               <p className="text-xs text-slate-500 truncate">{user.email}</p>
             </div>
           </div>
-          <Button onClick={openOptions} variant="outline" size="icon">
-            <Settings className="w-4 h-4" />
-          </Button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="outline" size="icon">
+                <Menu className="w-4 h-4" />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" sideOffset={6} className="bg-white border rounded-md shadow-md p-1">
+              <DropdownMenu.Item onSelect={openOptions} className="px-2 py-1.5 text-sm rounded hover:bg-gray-50 cursor-pointer flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+                Settings
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="h-px my-1 bg-slate-200" />
+              <DropdownMenu.Item onSelect={handleLogout} className="px-2 py-1.5 text-sm rounded hover:bg-gray-50 text-red-600 cursor-pointer flex items-center gap-2">
+                <LogOut className="w-4 h-4" />
+                Logout
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
 
         <div className="space-y-2">
