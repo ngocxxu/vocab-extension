@@ -262,7 +262,7 @@ function Popup() {
             <span className="text-lg font-bold text-white">V</span>
           </div>
           <h1 className="text-xl font-semibold text-slate-900">
-            Vocab Manager
+            Vocab Management
           </h1>
         </div>
       </div>

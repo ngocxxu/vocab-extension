@@ -380,7 +380,7 @@ function Options() {
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-              Vocab Manager Settings
+              Vocab Management Settings
             </h1>
             <p className="mt-1.5 text-slate-600">Manage your folders and subjects</p>
           </div>

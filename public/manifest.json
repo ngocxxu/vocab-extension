@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Vocab Manager",
+  "name": "Vocab Management",
   "version": "1.0.0",
   "description": "Save vocabulary from any webpage with a right-click",
   "permissions": [
