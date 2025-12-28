@@ -1,4 +1,69 @@
+import { apiClient } from '../../background/api-client';
+import { API_ENDPOINTS } from '../constants';
 import { StorageError } from './errors';
+import { ValidationError } from './validation';
+
+export interface UserExtensionConfig {
+  folderId: string;
+  subjectIds: string[];
+}
+
+const CONFIG_KEY = 'user.extension';
+
+export async function saveUserConfigToBackend(
+  folderId: string,
+  subjectIds: string[]
+): Promise<void> {
+  try {
+    if (!folderId || folderId.trim() === '') {
+      throw new ValidationError('Folder ID is required');
+    }
+    
+    if (!subjectIds || subjectIds.length === 0) {
+      throw new ValidationError('At least one subject ID is required');
+    }
+
+    const config: UserExtensionConfig = {
+      folderId,
+      subjectIds,
+    };
+    await apiClient.put(
+      API_ENDPOINTS.CONFIG.PUT(CONFIG_KEY),
+      { value: config }
+    );
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to save config to backend';
+    throw new Error(`Backend sync failed: ${errorMessage}`);
+  }
+}
+
+export async function loadUserConfigFromBackend(): Promise<UserExtensionConfig | null> {
+  try {
+    const response = await apiClient.get<{ key: string; value: UserExtensionConfig }>(
+      API_ENDPOINTS.CONFIG.GET(CONFIG_KEY)
+    );
+    
+    if (response?.value) {
+      const { folderId } = response.value;
+      
+      if (!folderId || folderId.trim() === '') {
+        return null;
+      }
+      
+      return response.value;
+    }
+    return null;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to load config from backend';
+    console.warn(`Backend config load failed: ${errorMessage}`);
+    return null;
+  }
+}
 
 export function getUserSettingsKey(userId: string, key: string): string {
   return `${key}_${userId}`;

@@ -5,7 +5,6 @@ import type { LanguageFolderDto } from '../shared/types/vocab';
 import type { IResponse } from '../shared/types/vocab';
 import {
   validateSelectedText,
-  validateUUID,
   ValidationError,
 } from '../shared/utils/validation';
 
@@ -65,11 +64,6 @@ export function setupContextMenu() {
           });
           return;
         }
-
-        validateUUID(folderId, 'Folder ID');
-        subjectIds.forEach((id, index) => {
-          validateUUID(id, `Subject ID at index ${index}`);
-        });
 
         // Fetch folders from API to avoid stale cache
         const foldersResponse = await apiClient.get<

@@ -28,7 +28,9 @@ import type {
 import { storage } from '../shared/utils/storage';
 import {
   cleanupOldUserSettings,
+  loadUserConfigFromBackend,
   loadUserSettings as loadUserSettingsUtil,
+  saveUserConfigToBackend,
   saveUserSettings as saveUserSettingsUtil
 } from '../shared/utils/user-settings';
 import {
@@ -56,13 +58,31 @@ function Options() {
 
   const loadUserSettings = async (userId: string) => {
     try {
-      const { folderId, subjectIds } = await loadUserSettingsUtil(userId);
-      setActiveFolderId(folderId);
-      setActiveSubjectIds(subjectIds);
+      const backendConfig = await loadUserConfigFromBackend();
+      
+      if (backendConfig && backendConfig.folderId && backendConfig.folderId.trim() !== '') {
+        setActiveFolderId(backendConfig.folderId);
+        setActiveSubjectIds(backendConfig.subjectIds || []);
+        
+        await saveUserSettingsUtil(userId, backendConfig.folderId, backendConfig.subjectIds);
+        await storage.set('activeFolderId', backendConfig.folderId);
+        await storage.set('activeSubjectIds', backendConfig.subjectIds);
+      } else {
+        const { folderId, subjectIds } = await loadUserSettingsUtil(userId);
+        setActiveFolderId(folderId);
+        setActiveSubjectIds(subjectIds);
+      }
     } catch (error) {
       console.error('Error loading user settings:', error);
-      setActiveFolderId('');
-      setActiveSubjectIds([]);
+      try {
+        const { folderId, subjectIds } = await loadUserSettingsUtil(userId);
+        setActiveFolderId(folderId);
+        setActiveSubjectIds(subjectIds);
+      } catch (fallbackError) {
+        console.error('Error loading from local storage:', fallbackError);
+        setActiveFolderId('');
+        setActiveSubjectIds([]);
+      }
     }
   };
 
@@ -279,6 +299,9 @@ function Options() {
       if (!userData) {
         throw new Error('User not found');
       }
+      
+      await saveUserConfigToBackend(activeFolderId, activeSubjectIds);
+      
       await cleanupOldUserSettings(userData.id);
       await saveUserSettingsUtil(user.id, activeFolderId, activeSubjectIds);
       await storage.set('activeFolderId', activeFolderId);

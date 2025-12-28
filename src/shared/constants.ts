@@ -34,4 +34,8 @@ export const API_ENDPOINTS = {
   LANGUAGES: {
     LIST: "/languages",
   },
+  CONFIG: {
+    GET: (key: string) => `/config/user/${key}`,
+    PUT: (key: string) => `/config/user/${key}`,
+  },
 } as const;
