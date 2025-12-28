@@ -1,18 +1,16 @@
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === "GET_SELECTION") {
-    const selection = window.getSelection();
-    const selectedText = selection?.toString().trim() || "";
+chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
+  if (request.type === 'GET_SELECTION') {
+    const selection = globalThis.getSelection();
+    const selectedText = selection?.toString().trim() || '';
 
     sendResponse({ selectedText });
   }
 });
 
-// Listen for context menu click (if needed)
 document.addEventListener(
-  "contextmenu",
+  'contextmenu',
   (event) => {
-    // Store last clicked position for context menu
-    (window as any).__vocabLastContextMenuTarget = event.target;
+    (globalThis as unknown as { __vocabLastContextMenuTarget: EventTarget | null }).__vocabLastContextMenuTarget = event.target;
   },
   true
 );

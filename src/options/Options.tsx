@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient } from '../background/api-client';
 import { tokenManager } from '../background/token-manager';
+import AuthForm from '../components/auth/AuthForm';
 import { Input } from '../components/ui/input';
 import { MultiSelect } from '../components/ui/multi-select';
 import {
@@ -25,7 +26,17 @@ import type {
   WordTypeDto,
 } from '../shared/types/vocab';
 import { storage } from '../shared/utils/storage';
-import AuthForm from '../components/auth/AuthForm';
+import {
+  cleanupOldUserSettings,
+  loadUserSettings as loadUserSettingsUtil,
+  saveUserSettings as saveUserSettingsUtil
+} from '../shared/utils/user-settings';
+import {
+  validateHexColor,
+  validateLanguageCode,
+  validateName,
+  ValidationError,
+} from '../shared/utils/validation';
 
 function Options() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -43,126 +54,15 @@ function Options() {
   const [isCreateSubjectOpen, setIsCreateSubjectOpen] = useState(false);
   const [folderColor, setFolderColor] = useState('#4CAF50');
 
-  const getUserSettingsKey = (userId: string, key: string) => `${key}_${userId}`;
-
-  const cleanupOldUserSettings = async () => {
-    try {
-      const userData = await storage.get('user');
-      if (!userData) {
-        return;
-      }
-      
-      const allData = await chrome.storage.local.get(null);
-      if (chrome.runtime.lastError) {
-        console.error('Error getting all storage data:', chrome.runtime.lastError);
-        return;
-      }
-      
-      const currentUserId = userData.id;
-      const userSettingsKeys: string[] = [];
-      
-      for (const key in allData) {
-        if (key.startsWith('activeFolderId_') || key.startsWith('activeSubjectIds_')) {
-          const userId = key.split('_')[1];
-          if (userId && userId !== currentUserId) {
-            userSettingsKeys.push(key);
-          }
-        }
-      }
-      
-      if (userSettingsKeys.length > 0) {
-        await chrome.storage.local.remove(userSettingsKeys);
-        if (chrome.runtime.lastError) {
-          console.error('Error cleaning up old user settings:', chrome.runtime.lastError);
-        }
-      }
-    } catch (error) {
-      console.error('Error cleaning up old user settings:', error);
-    }
-  };
-
   const loadUserSettings = async (userId: string) => {
-    const folderKey = getUserSettingsKey(userId, 'activeFolderId');
-    const subjectIdsKey = getUserSettingsKey(userId, 'activeSubjectIds');
-    const legacySubjectIdKey = getUserSettingsKey(userId, 'activeSubjectId');
-
     try {
-      const result = await chrome.storage.local.get([folderKey, subjectIdsKey, legacySubjectIdKey]);
-      
-      if (chrome.runtime.lastError) {
-        console.error('Error loading user settings:', chrome.runtime.lastError);
-        setActiveFolderId('');
-        setActiveSubjectIds([]);
-        return;
-      }
-      
-      const folderId = result[folderKey] || '';
-      const subjectIds = result[subjectIdsKey];
-      const legacySubjectId = result[legacySubjectIdKey];
-
+      const { folderId, subjectIds } = await loadUserSettingsUtil(userId);
       setActiveFolderId(folderId);
-
-      if (subjectIds && Array.isArray(subjectIds)) {
-        setActiveSubjectIds(subjectIds);
-      } else if (legacySubjectId) {
-        setActiveSubjectIds([legacySubjectId]);
-        try {
-          await chrome.storage.local.set({ [subjectIdsKey]: [legacySubjectId] });
-          await chrome.storage.local.remove(legacySubjectIdKey);
-          
-          if (chrome.runtime.lastError) {
-            console.error('Error migrating legacy subject ID:', chrome.runtime.lastError);
-          }
-        } catch (error) {
-          console.error('Error migrating legacy subject ID:', error);
-        }
-      } else {
-        setActiveSubjectIds([]);
-      }
+      setActiveSubjectIds(subjectIds);
     } catch (error) {
       console.error('Error loading user settings:', error);
       setActiveFolderId('');
       setActiveSubjectIds([]);
-    }
-  };
-
-  const saveUserSettings = async (userId: string, folderId: string, subjectIds: string[]) => {
-    const folderKey = getUserSettingsKey(userId, 'activeFolderId');
-    const subjectIdsKey = getUserSettingsKey(userId, 'activeSubjectIds');
-    
-    try {
-      await chrome.storage.local.set({
-        [folderKey]: folderId,
-        [subjectIdsKey]: subjectIds,
-      });
-      
-      if (chrome.runtime.lastError) {
-        const errorMessage = chrome.runtime.lastError.message;
-        if (errorMessage?.includes('QUOTA_BYTES') || errorMessage?.includes('quota')) {
-          await cleanupOldUserSettings();
-          
-          try {
-            await chrome.storage.local.set({
-              [folderKey]: folderId,
-              [subjectIdsKey]: subjectIds,
-            });
-            
-            if (chrome.runtime.lastError) {
-              throw new Error('Storage quota exceeded. Unable to save settings.');
-            }
-          } catch {
-            throw new Error('Unable to save settings. Storage is full.');
-          }
-        } else {
-          throw new Error(errorMessage || 'Failed to save settings');
-        }
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (!errorMessage.includes('quota') && !errorMessage.includes('QUOTA_BYTES')) {
-        throw error;
-      }
-      throw new Error(errorMessage || 'Storage quota exceeded');
     }
   };
 
@@ -189,9 +89,11 @@ function Options() {
     const userData = await storage.get('user');
     if (userData) {
       setUser(userData);
-      await loadLanguages();
-      await loadFolders();
-      await loadSubjects();
+      await Promise.all([
+        loadLanguages(),
+        loadFolders(),
+        loadSubjects(),
+      ]);
       await loadUserSettings(userData.id);
     }
   };
@@ -294,14 +196,23 @@ function Options() {
 
     const form = e.currentTarget;
     const formData = new FormData(form);
-    const folderData: LanguageFolderInput = {
-      name: formData.get('name') as string,
-      folderColor: formData.get('color') as string || '#4CAF50',
-      sourceLanguageCode: formData.get('sourceLanguage') as string,
-      targetLanguageCode: formData.get('targetLanguage') as string,
-    };
+    const name = formData.get('name') as string;
+    const color = formData.get('color') as string || '#4CAF50';
+    const sourceLanguageCode = formData.get('sourceLanguage') as string;
+    const targetLanguageCode = formData.get('targetLanguage') as string;
 
     try {
+      validateName(name, 'Folder name');
+      validateHexColor(color);
+      validateLanguageCode(sourceLanguageCode);
+      validateLanguageCode(targetLanguageCode);
+
+      const folderData: LanguageFolderInput = {
+        name,
+        folderColor: color,
+        sourceLanguageCode,
+        targetLanguageCode,
+      };
       const folder = await apiClient.post('/language-folders', folderData);
       setFolders([...folders, folder as LanguageFolderDto]);
       form.reset();
@@ -311,7 +222,11 @@ function Options() {
       setIsCreateFolderOpen(false);
       toast.success('Folder created successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create folder');
+      if (err instanceof ValidationError) {
+        setError(err.message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to create folder');
+      }
     }
   };
 
@@ -321,18 +236,25 @@ function Options() {
 
     const form = e.currentTarget;
     const formData = new FormData(form);
-    const subjectData: SubjectInput = {
-      name: formData.get('name') as string,
-    };
+    const name = formData.get('name') as string;
 
     try {
+      validateName(name, 'Subject name');
+
+      const subjectData: SubjectInput = {
+        name,
+      };
       const subject = await apiClient.post('/subjects', subjectData);
       setSubjects([...subjects, subject as SubjectDto]);
       form.reset();
       setIsCreateSubjectOpen(false);
       toast.success('Subject created successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create subject');
+      if (err instanceof ValidationError) {
+        setError(err.message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to create subject');
+      }
     }
   };
 
@@ -353,7 +275,12 @@ function Options() {
     }
 
     try {
-      await saveUserSettings(user.id, activeFolderId, activeSubjectIds);
+      const userData = await storage.get('user');
+      if (!userData) {
+        throw new Error('User not found');
+      }
+      await cleanupOldUserSettings(userData.id);
+      await saveUserSettingsUtil(user.id, activeFolderId, activeSubjectIds);
       await storage.set('activeFolderId', activeFolderId);
       await storage.set('activeSubjectIds', activeSubjectIds);
       setError('');

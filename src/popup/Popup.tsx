@@ -17,6 +17,11 @@ import {
 import { MultiSelect } from "../components/ui/multi-select";
 import { Button } from "@/components/ui/button";
 import AuthForm from "../components/auth/AuthForm";
+import {
+  loadUserSettings as loadUserSettingsUtil,
+  saveUserSettings as saveUserSettingsUtil,
+  cleanupOldUserSettings,
+} from "../shared/utils/user-settings";
 
 function Popup() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -45,9 +50,6 @@ function Popup() {
     };
   }, []);
 
-  const getUserSettingsKey = (userId: string, key: string) =>
-    `${key}_${userId}`;
-
   const loadData = useCallback(async () => {
     const userData = await storage.get("user");
     setUser(userData || null);
@@ -62,58 +64,15 @@ function Popup() {
       return;
     }
 
-    const folderKey = getUserSettingsKey(userData.id, "activeFolderId");
-    const subjectIdsKey = getUserSettingsKey(userData.id, "activeSubjectIds");
-    const legacySubjectIdKey = getUserSettingsKey(
-      userData.id,
-      "activeSubjectId"
-    );
-
     try {
-      const result = await chrome.storage.local.get([
-        folderKey,
-        subjectIdsKey,
-        legacySubjectIdKey,
-      ]);
-
-      if (chrome.runtime.lastError) {
-        console.error("Error loading user settings:", chrome.runtime.lastError);
-        setFolder(null);
-        setSubjects([]);
-        setFolders([]);
-        setAllSubjects([]);
-        setActiveFolderId("");
-        setActiveSubjectIds([]);
-        return;
-      }
-
-      const folderId = result[folderKey] || "";
-      const subjectIds = result[subjectIdsKey];
-      const legacySubjectId = result[legacySubjectIdKey];
-
+      const { folderId, subjectIds } = await loadUserSettingsUtil(userData.id);
       const cachedFolders = (await storage.get("cachedFolders")) || [];
       const cachedSubjects = (await storage.get("cachedSubjects")) || [];
       setFolders(cachedFolders);
       setAllSubjects(cachedSubjects);
 
       setActiveFolderId(folderId);
-
-      if (subjectIds && Array.isArray(subjectIds)) {
-        setActiveSubjectIds(subjectIds);
-      } else if (legacySubjectId) {
-        // migrate legacy single subject id to array
-        try {
-          await chrome.storage.local.set({
-            [subjectIdsKey]: [legacySubjectId],
-          });
-          await chrome.storage.local.remove(legacySubjectIdKey);
-        } catch (err) {
-          console.error("Error migrating legacy subject ID:", err);
-        }
-        setActiveSubjectIds([legacySubjectId]);
-      } else {
-        setActiveSubjectIds([]);
-      }
+      setActiveSubjectIds(subjectIds);
 
       // derive display models
       if (folderId) {
@@ -129,9 +88,6 @@ function Popup() {
           subjectIds.includes(s.id)
         );
         setSubjects(activeSubjects);
-      } else if (legacySubjectId) {
-        const migrated = cachedSubjects.filter((s) => s.id === legacySubjectId);
-        setSubjects(migrated);
       } else {
         setSubjects([]);
       }
@@ -145,61 +101,6 @@ function Popup() {
       setActiveSubjectIds([]);
     }
   }, []);
-
-  const saveUserSettings = async (
-    userId: string,
-    folderId: string,
-    subjectIds: string[]
-  ) => {
-    const folderKey = getUserSettingsKey(userId, "activeFolderId");
-    const subjectIdsKey = getUserSettingsKey(userId, "activeSubjectIds");
-
-    try {
-      await chrome.storage.local.set({
-        [folderKey]: folderId,
-        [subjectIdsKey]: subjectIds,
-      });
-
-      if (chrome.runtime.lastError) {
-        const msg = chrome.runtime.lastError.message;
-        if (msg?.includes("QUOTA_BYTES") || msg?.includes("quota")) {
-          // best-effort: remove other users' settings like Options does
-          try {
-            const allData = await chrome.storage.local.get(null);
-            const keysToRemove: string[] = [];
-            for (const k in allData) {
-              if (
-                (k.startsWith("activeFolderId_") ||
-                  k.startsWith("activeSubjectIds_")) &&
-                !k.endsWith(`_${userId}`)
-              ) {
-                keysToRemove.push(k);
-              }
-            }
-            if (keysToRemove.length) {
-              await chrome.storage.local.remove(keysToRemove);
-            }
-            await chrome.storage.local.set({
-              [folderKey]: folderId,
-              [subjectIdsKey]: subjectIds,
-            });
-            if (chrome.runtime.lastError) {
-              throw new Error(
-                "Storage quota exceeded. Unable to save settings."
-              );
-            }
-          } catch {
-            throw new Error("Unable to save settings. Storage is full.");
-          }
-        } else {
-          throw new Error(msg || "Failed to save settings");
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(message || "Failed to save settings");
-    }
-  };
 
   const handleSave = async () => {
     setError("");
@@ -216,7 +117,8 @@ function Popup() {
 
     setSaving(true);
     try {
-      await saveUserSettings(user.id, activeFolderId, activeSubjectIds);
+      await cleanupOldUserSettings(user.id);
+      await saveUserSettingsUtil(user.id, activeFolderId, activeSubjectIds);
       await storage.set("activeFolderId", activeFolderId);
       await storage.set("activeSubjectIds", activeSubjectIds);
 

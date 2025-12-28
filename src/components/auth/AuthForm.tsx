@@ -5,6 +5,12 @@ import { apiClient } from "../../background/api-client";
 import { completeLogin } from "../../shared/utils/auth";
 import type { UserDto } from "../../shared/types/api";
 import { cn } from "@/shared/utils/utils";
+import {
+  validateEmail,
+  validatePassword,
+  validateName,
+  ValidationError,
+} from "../../shared/utils/validation";
 
 type Variant = "popup" | "options";
 
@@ -13,7 +19,7 @@ interface AuthFormProps {
   onSuccess?: (user: UserDto) => void | Promise<void>;
 }
 
-export function AuthForm({ variant = "options", onSuccess }: AuthFormProps) {
+export function AuthForm({ variant = "options", onSuccess }: Readonly<AuthFormProps>) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,37 +38,30 @@ export function AuthForm({ variant = "options", onSuccess }: AuthFormProps) {
     setLoading(true);
 
     try {
+      validateEmail(email);
+      validatePassword(password);
+
+      if (mode === "signup") {
+        validateName(firstName, "First name");
+        validateName(lastName, "Last name");
+      }
+
       if (mode === "signin") {
-        const res = await apiClient.post<{
-          accessToken: string;
-          refreshToken: string;
-        }>("/auth/signin", { email, password });
-        const user = await completeLogin(res);
+        await apiClient.post("/auth/signin", { email, password });
+        const user = await completeLogin();
         await onSuccess?.(user);
       } else {
-        const res = await apiClient.post<{
-          accessToken?: string;
-          refreshToken?: string;
-        }>("/auth/signup", { email, password, firstName, lastName });
-        if (res.accessToken && res.refreshToken) {
-          const user = await completeLogin({
-            accessToken: res.accessToken,
-            refreshToken: res.refreshToken,
-          });
-          await onSuccess?.(user);
-        } else {
-          // Some APIs return no tokens on signup; try sign-in immediately
-          const login = await apiClient.post<{
-            accessToken: string;
-            refreshToken: string;
-          }>("/auth/signin", { email, password });
-          const user = await completeLogin(login);
-          await onSuccess?.(user);
-        }
+        await apiClient.post("/auth/signup", { email, password, firstName, lastName });
+        const user = await completeLogin();
+        await onSuccess?.(user);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Authentication failed";
-      setError(msg);
+      if (err instanceof ValidationError) {
+        setError(err.message);
+      } else {
+        const msg = err instanceof Error ? err.message : "Authentication failed";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

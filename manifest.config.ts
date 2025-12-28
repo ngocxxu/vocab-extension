@@ -7,6 +7,7 @@ export default defineManifest({
   description: 'Save vocabulary from any webpage with a right-click',
   permissions: [
     'storage',
+    'cookies',
     'contextMenus',
     'notifications',
     'activeTab',
