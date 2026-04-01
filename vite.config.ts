@@ -29,6 +29,15 @@ const fixHMRPortPlugin = (): Plugin => {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), crx({ manifest }), fixHMRPortPlugin()],
+  build: {
+    rollupOptions: {
+      input: {
+        popup: path.resolve(__dirname, "src/popup/index.html"),
+        options: path.resolve(__dirname, "src/options/index.html"),
+        oauthCallback: path.resolve(__dirname, "src/oauth-callback/index.html"),
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

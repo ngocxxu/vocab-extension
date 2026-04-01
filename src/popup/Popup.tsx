@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { Settings, User, Save, LogOut, Menu } from "lucide-react";
-import { storage } from "../shared/utils/storage";
+import { Button } from "@/components/ui/button";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { LogOut, Menu, Save, Settings, User } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "../background/api-client";
 import { tokenManager } from "../background/token-manager";
-import { API_ENDPOINTS } from "../shared/constants";
-import type { UserDto } from "../shared/types/api";
-import type { LanguageFolderDto, SubjectDto } from "../shared/types/vocab";
+import AuthForm from "../components/auth/AuthForm";
+import { Logo } from "../components/branding/Logo";
+import { Card } from "../components/ui/card";
+import { MultiSelect } from "../components/ui/multi-select";
 import {
   Select,
   SelectContent,
@@ -14,13 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { MultiSelect } from "../components/ui/multi-select";
-import { Button } from "@/components/ui/button";
-import AuthForm from "../components/auth/AuthForm";
+import { API_ENDPOINTS } from "../shared/constants";
+import type { UserDto } from "../shared/types/api";
+import type { LanguageFolderDto, SubjectDto } from "../shared/types/vocab";
+import { storage } from "../shared/utils/storage";
 import {
+  cleanupOldUserSettings,
   loadUserSettings as loadUserSettingsUtil,
   saveUserSettings as saveUserSettingsUtil,
-  cleanupOldUserSettings,
 } from "../shared/utils/user-settings";
 
 function Popup() {
@@ -157,29 +159,26 @@ function Popup() {
   }
 
   return (
-    <div className="w-80 bg-gradient-to-b from-slate-50 to-white">
-      <div className="p-6 border-b border-slate-200">
+    <div className="w-80 bg-background">
+      <div className="p-6 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center shadow-md">
-            <span className="text-lg font-bold text-white">V</span>
-          </div>
-          <h1 className="text-xl font-semibold text-slate-900">
-            Vocab Management
-          </h1>
+          <Logo className="h-10 w-10" />
+          <h1 className="text-xl font-semibold text-foreground">Vocab Management</h1>
         </div>
       </div>
 
       <div className="p-6 space-y-4">
-        <div className="flex justify-between gap-3 p-3 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
+        <Card className="py-0 rounded-xl">
+          <div className="flex justify-between gap-3 p-3">
           <div className="flex  items-center gap-2">
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-              <User className="w-4 h-4 text-blue-600" />
+            <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center shrink-0">
+              <User className="w-4 h-4 text-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">
+              <p className="text-sm font-medium text-foreground truncate">
                 {user.firstName + " " + user.lastName || user.email}
               </p>
-              <p className="text-xs text-slate-500 truncate">{user.email}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
           <DropdownMenu.Root>
@@ -188,26 +187,37 @@ function Popup() {
                 <Menu className="w-4 h-4" />
               </Button>
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end" sideOffset={6} className="bg-white border rounded-md shadow-md p-1">
-              <DropdownMenu.Item onSelect={openOptions} className="px-2 py-1.5 text-sm rounded hover:bg-gray-50 cursor-pointer flex items-center gap-2">
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={6}
+              className="bg-popover text-popover-foreground border rounded-md shadow-md p-1"
+            >
+              <DropdownMenu.Item
+                onSelect={openOptions}
+                className="px-2 py-1.5 text-sm rounded hover:bg-accent cursor-pointer flex items-center gap-2 outline-none"
+              >
               <Settings className="w-4 h-4" />
                 Settings
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="h-px my-1 bg-slate-200" />
-              <DropdownMenu.Item onSelect={handleLogout} className="px-2 py-1.5 text-sm rounded hover:bg-gray-50 text-red-600 cursor-pointer flex items-center gap-2">
+              <DropdownMenu.Separator className="h-px my-1 bg-border" />
+              <DropdownMenu.Item
+                onSelect={handleLogout}
+                className="px-2 py-1.5 text-sm rounded hover:bg-accent text-destructive cursor-pointer flex items-center gap-2 outline-none"
+              >
                 <LogOut className="w-4 h-4" />
                 Logout
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </div>
+        </Card>
 
         <div className="space-y-2">
           <div className="space-y-2">
             {(!folder || subjects.length === 0) && (
               <>
-                <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                  <p className="text-xs text-amber-800">
+                <div className="p-3 bg-accent border border-border rounded-lg">
+                  <p className="text-xs text-foreground">
                     Please configure your folder and subject in settings.
                   </p>
                 </div>
@@ -218,12 +228,12 @@ function Popup() {
         </div>
 
         <div className="space-y-3 pt-2">
-          <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Edit Settings
           </div>
 
           <div>
-            <div className="text-xs font-medium text-slate-700 mb-1">
+            <div className="text-xs font-medium text-foreground mb-1">
               Folder
             </div>
             <Select value={activeFolderId} onValueChange={setActiveFolderId}>
@@ -247,7 +257,7 @@ function Popup() {
           </div>
 
           <div>
-            <div className="text-xs font-medium text-slate-700 mb-1">
+            <div className="text-xs font-medium text-foreground mb-1">
               Subjects
             </div>
             <MultiSelect
@@ -260,24 +270,24 @@ function Popup() {
           </div>
 
           {error && (
-            <div className="p-2 bg-red-50 border border-red-200 rounded">
-              <p className="text-xs text-red-700 font-medium">{error}</p>
+            <div className="p-2 bg-accent border border-border rounded">
+              <p className="text-xs text-destructive font-medium">{error}</p>
             </div>
           )}
           {success && (
-            <div className="p-2 bg-emerald-50 border border-emerald-200 rounded">
-              <p className="text-xs text-emerald-700 font-medium">{success}</p>
+            <div className="p-2 bg-accent border border-border rounded">
+              <p className="text-xs text-foreground font-medium">{success}</p>
             </div>
           )}
 
-          <button
+          <Button
             onClick={handleSave}
             disabled={!activeFolderId || saving}
-            className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full"
           >
             <Save className="w-4 h-4" />
             {saving ? "Saving..." : "Save Settings"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

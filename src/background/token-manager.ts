@@ -80,6 +80,12 @@ export class TokenManager {
 
     this.refreshPromise = (async () => {
       try {
+        const refreshToken = await getCookie('refreshToken');
+        if (!refreshToken) {
+          await this.clearTokens();
+          return null;
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -90,6 +96,7 @@ export class TokenManager {
             headers: {
               'Content-Type': 'application/json',
             },
+            body: JSON.stringify({ refreshToken }),
             signal: controller.signal,
           });
 

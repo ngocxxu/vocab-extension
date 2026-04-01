@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { apiClient } from '../background/api-client';
 import { tokenManager } from '../background/token-manager';
 import AuthForm from '../components/auth/AuthForm';
+import { Logo } from '../components/branding/Logo';
+import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { MultiSelect } from '../components/ui/multi-select';
 import {
@@ -89,6 +91,28 @@ function Options() {
   useEffect(() => {
     checkAuth();
 
+    const onStorageChanged = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.user) {
+        if (changes.user.newValue) {
+          const newUser = changes.user.newValue as UserDto;
+          setUser(newUser);
+          Promise.all([
+            loadLanguages(),
+            loadFolders(),
+            loadSubjects(),
+          ]).then(() => loadUserSettings(newUser.id));
+        } else {
+          setUser(null);
+          setFolders([]);
+          setSubjects([]);
+          setActiveFolderId('');
+          setActiveSubjectIds([]);
+        }
+      }
+    };
+
+    chrome.storage.local.onChanged.addListener(onStorageChanged);
+
     const handleLogoutMessage = () => {
       handleLogout();
     };
@@ -100,6 +124,7 @@ function Options() {
     });
 
     return () => {
+      chrome.storage.local.onChanged.removeListener(onStorageChanged); // ← cleanup
       chrome.runtime.onMessage.removeListener(handleLogoutMessage);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -316,7 +341,7 @@ function Options() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-8">
+      <div className="min-h-screen bg-background p-8">
           <AuthForm variant="options" onSuccess={handleAuthSuccess} />
       </div>
     );
@@ -325,47 +350,46 @@ function Options() {
   const selectedFolder = folders.find(f => f.id === activeFolderId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 p-6 md:p-8">
+    <div className="min-h-screen bg-background p-6 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-foreground">
               Vocab Management Settings
             </h1>
-            <p className="mt-1.5 text-slate-600">Manage your folders and subjects</p>
+            <p className="mt-1.5 text-muted-foreground">Manage your folders and subjects</p>
           </div>
-          <button
+          <Button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 shadow-sm hover:shadow-md"
+            variant="destructive"
+            className="shadow-sm"
           >
             <LogOut className="w-4 h-4" />
             <span className="hidden sm:inline">Logout</span>
-          </button>
+          </Button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
-              <BookOpen className="w-6 h-6 text-white" />
-            </div>
+            <Logo className="h-12 w-12" />
             <div>
-              <p className="font-semibold text-slate-900 text-lg">
+              <p className="font-semibold text-foreground text-lg">
                 {user.firstName + ' ' + user.lastName || 'User'}
               </p>
-              <p className="text-sm text-slate-600">{user.email}</p>
+              <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 space-y-6">
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-8 space-y-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-foreground" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Active Folder</h2>
-                <p className="text-sm text-slate-600">Choose which folder to use for saving new vocabulary</p>
+                <h2 className="text-xl font-bold text-foreground">Active Folder</h2>
+                <p className="text-sm text-muted-foreground">Choose which folder to use for saving new vocabulary</p>
               </div>
             </div>
             
@@ -379,12 +403,12 @@ function Options() {
                     <SelectItem key={folder.id} value={folder.id}>
                       <div className="flex items-center gap-3 py-1">
                         <div
-                          className="w-5 h-5 rounded-full shrink-0 border-2 border-white shadow-sm"
+                          className="w-5 h-5 rounded-full shrink-0 border-2 border-background shadow-sm"
                           style={{ backgroundColor: folder.folderColor }}
                         />
                         <div className="flex-1">
                           <div className="font-medium text-base">{folder.name}</div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-muted-foreground">
                             {folder.sourceLanguageCode.toUpperCase()} → {folder.targetLanguageCode.toUpperCase()}
                           </div>
                         </div>
@@ -396,15 +420,15 @@ function Options() {
             </div>
 
             {selectedFolder && (
-              <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
+              <div className="mt-4 p-4 bg-accent rounded-xl border border-border">
                 <div className="flex items-center gap-3">
                   <div
-                    className="w-6 h-6 rounded-full shrink-0 border-2 border-white shadow-md"
+                    className="w-6 h-6 rounded-full shrink-0 border-2 border-background shadow-md"
                     style={{ backgroundColor: selectedFolder.folderColor }}
                   />
                   <div className="flex-1">
-                    <p className="font-semibold text-slate-900">{selectedFolder.name}</p>
-                    <p className="text-xs text-slate-600">
+                    <p className="font-semibold text-foreground">{selectedFolder.name}</p>
+                    <p className="text-xs text-muted-foreground">
                       {selectedFolder.sourceLanguageCode.toUpperCase()} → {selectedFolder.targetLanguageCode.toUpperCase()}
                     </p>
                   </div>
@@ -417,12 +441,12 @@ function Options() {
 
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Tag className="w-5 h-5 text-purple-600" />
+              <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center">
+                <Tag className="w-5 h-5 text-foreground" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Active Subjects</h2>
-                <p className="text-sm text-slate-600">Choose which subjects to categorize your vocabulary (max 3)</p>
+                <h2 className="text-xl font-bold text-foreground">Active Subjects</h2>
+                <p className="text-sm text-muted-foreground">Choose which subjects to categorize your vocabulary (max 3)</p>
               </div>
             </div>
             
@@ -438,8 +462,8 @@ function Options() {
             </div>
 
             {activeSubjectIds.length > 0 && (
-              <div className="mt-4 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                <p className="text-sm font-medium text-slate-700 mb-2">
+              <div className="mt-4 p-4 bg-accent rounded-xl border border-border">
+                <p className="text-sm font-medium text-foreground mb-2">
                   {activeSubjectIds.length} subject{activeSubjectIds.length > 1 ? 's' : ''} selected
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -448,7 +472,7 @@ function Options() {
                     return subject ? (
                       <div
                         key={id}
-                        className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium"
+                        className="px-3 py-1.5 bg-background text-foreground rounded-lg text-sm font-medium border border-border"
                       >
                         {subject.name}
                       </div>
@@ -468,32 +492,32 @@ function Options() {
                 setFolderColor('#4CAF50');
               }
             }}
-            className="w-full bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-all duration-200 group"
+            className="w-full bg-card rounded-xl shadow-sm border border-border p-4 hover:bg-accent transition-all duration-200 group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                  <Plus className="w-5 h-5 text-green-600" />
+                <div className="w-10 h-10 bg-background rounded-lg flex items-center justify-center transition-colors border border-border">
+                  <Plus className="w-5 h-5 text-foreground" />
                 </div>
                 <div className="text-left">
-                  <h3 className="font-semibold text-slate-900">Create New Folder</h3>
-                  <p className="text-sm text-slate-600">Add a new language learning folder</p>
+                  <h3 className="font-semibold text-foreground">Create New Folder</h3>
+                  <p className="text-sm text-muted-foreground">Add a new language learning folder</p>
                 </div>
               </div>
               {isCreateFolderOpen ? (
-                <ChevronUp className="w-5 h-5 text-slate-400" />
+                <ChevronUp className="w-5 h-5 text-muted-foreground" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-slate-400" />
+                <ChevronDown className="w-5 h-5 text-muted-foreground" />
               )}
             </div>
           </button>
 
           {isCreateFolderOpen && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-in slide-in-from-top-2 duration-200">
+            <div className="bg-card rounded-xl shadow-sm border border-border p-6 animate-in slide-in-from-top-2 duration-200">
               <form onSubmit={handleCreateFolder} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-semibold mb-2 text-slate-900">Folder Name</label>
+                    <label className="block text-sm font-semibold mb-2 text-foreground">Folder Name</label>
                     <Input
                       name="name"
                       required
@@ -502,7 +526,7 @@ function Options() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-2 text-slate-900">Color</label>
+                    <label className="block text-sm font-semibold mb-2 text-foreground">Color</label>
                     <div className="flex items-center gap-3">
                       <Input
                         type="color"
@@ -519,7 +543,7 @@ function Options() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-semibold mb-2 text-slate-900">Source Language</label>
+                    <label className="block text-sm font-semibold mb-2 text-foreground">Source Language</label>
                     <Select
                       name="sourceLanguage"
                       value={selectedSourceLang}
@@ -539,7 +563,7 @@ function Options() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-2 text-slate-900">Target Language</label>
+                    <label className="block text-sm font-semibold mb-2 text-foreground">Target Language</label>
                     <Select
                       name="targetLanguage"
                       value={selectedTargetLang}
@@ -559,43 +583,40 @@ function Options() {
                     </Select>
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-all duration-200 font-semibold shadow-sm hover:shadow-md"
-                >
+                <Button type="submit" className="w-full">
                   Create Folder
-                </button>
+                </Button>
               </form>
             </div>
           )}
 
           <button
             onClick={() => setIsCreateSubjectOpen(!isCreateSubjectOpen)}
-            className="w-full bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-all duration-200 group"
+            className="w-full bg-card rounded-xl shadow-sm border border-border p-4 hover:bg-accent transition-all duration-200 group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
-                  <Plus className="w-5 h-5 text-orange-600" />
+                <div className="w-10 h-10 bg-background rounded-lg flex items-center justify-center transition-colors border border-border">
+                  <Plus className="w-5 h-5 text-foreground" />
                 </div>
                 <div className="text-left">
-                  <h3 className="font-semibold text-slate-900">Create New Subject</h3>
-                  <p className="text-sm text-slate-600">Add a new subject to organize your vocabulary</p>
+                  <h3 className="font-semibold text-foreground">Create New Subject</h3>
+                  <p className="text-sm text-muted-foreground">Add a new subject to organize your vocabulary</p>
                 </div>
               </div>
               {isCreateSubjectOpen ? (
-                <ChevronUp className="w-5 h-5 text-slate-400" />
+                <ChevronUp className="w-5 h-5 text-muted-foreground" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-slate-400" />
+                <ChevronDown className="w-5 h-5 text-muted-foreground" />
               )}
             </div>
           </button>
 
           {isCreateSubjectOpen && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-in slide-in-from-top-2 duration-200">
+            <div className="bg-card rounded-xl shadow-sm border border-border p-6 animate-in slide-in-from-top-2 duration-200">
               <form onSubmit={handleCreateSubject} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-semibold mb-2 text-slate-900">Subject Name</label>
+                  <label className="block text-sm font-semibold mb-2 text-foreground">Subject Name</label>
                   <Input
                     name="name"
                     required
@@ -603,41 +624,38 @@ function Options() {
                     className="h-11"
                   />
                 </div>
-                <button
-                  type="submit"
-                  className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-all duration-200 font-semibold shadow-sm hover:shadow-md"
-                >
+                <Button type="submit" className="w-full">
                   Create Subject
-                </button>
+                </Button>
               </form>
             </div>
           )}
         </div>
 
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-lg border border-blue-500/20 p-8">
+        <div className="bg-card rounded-2xl shadow-lg border border-border p-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="text-white">
+            <div>
               <h3 className="text-lg font-bold mb-1">Ready to save your settings?</h3>
-              <p className="text-sm text-blue-50">
+              <p className="text-sm text-muted-foreground">
                 {activeFolderId && activeSubjectIds.length > 0
                   ? 'All required settings are configured'
                   : 'Please select a folder and at least one subject'}
               </p>
             </div>
-            <button
+            <Button
               onClick={handleSaveSettings}
               disabled={!activeFolderId || activeSubjectIds.length === 0}
-              className="w-full sm:w-auto bg-white text-blue-600 py-3 px-8 rounded-lg hover:bg-blue-50 transition-all duration-200 font-semibold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-8 shadow-md"
             >
               <Save className="w-5 h-5" />
               Save Settings
-            </button>
+            </Button>
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
-            <p className="text-sm text-red-700 font-medium">{error}</p>
+          <div className="bg-accent border border-border rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
+            <p className="text-sm text-destructive font-medium">{error}</p>
           </div>
         )}
       </div>
