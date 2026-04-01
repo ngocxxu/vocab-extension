@@ -2,6 +2,11 @@ import { setupContextMenu } from './context-menu';
 import { storage } from '../shared/utils/storage';
 import { apiClient } from './api-client';
 import type { LanguageFolderDto } from '../shared/types/vocab';
+import {
+  formatCooldownRemaining,
+  getRemainingCooldownMs,
+  recordSuccessfulCreate,
+} from './vocab-create-cooldown';
 
 setupContextMenu();
 
@@ -66,6 +71,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     (async () => {
       try {
+        const userData = await storage.get('user');
+        if (!userData) {
+          sendResponse({ success: false, error: 'Not logged in.' });
+          return;
+        }
+
+        const remainingMs = await getRemainingCooldownMs(userData.id);
+        if (remainingMs > 0) {
+          sendResponse({
+            success: false,
+            error: `Please wait ${formatCooldownRemaining(remainingMs)} before adding another word.`,
+            cooldownRemainingMs: remainingMs,
+          });
+          return;
+        }
+
         const folders = await storage.get('cachedFolders');
         const activeFolder = folders?.find(
           (f: LanguageFolderDto) => f.id === folderId
@@ -87,8 +108,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           ],
         };
 
-        await apiClient.post('/vocabs', vocabData);
-        sendResponse({ success: true });
+        const result = await apiClient.post('/vocabs', vocabData);
+        await recordSuccessfulCreate(userData.id);
+        sendResponse({ success: true, data: result });
       } catch (error) {
         sendResponse({
           success: false,
